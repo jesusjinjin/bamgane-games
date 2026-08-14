@@ -6,8 +6,8 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>떡 자르기</title>
-<link rel="stylesheet" href="common.css?v=38">
-<script src="common.js?v=38"></script>
+<link rel="stylesheet" href="common.css?v=48">
+<script src="common.js?v=48"></script>
 <style>
   :root { --accent-1: #ec4899; --accent-2: #e11d48; }
 
@@ -91,7 +91,7 @@
         <div class="ratio" id="ratio"></div>
         <div class="slot" id="slot"></div>
         <div class="controls">
-          <button class="btn" id="go">시 작</button>
+          <button class="btn" id="go">도 전</button>
           <div class="hint">스페이스바</div>
         </div>
       </div>
@@ -105,7 +105,7 @@
         <li>가운데를 지날 때 가장 빠릅니다</li>
         <li>끌수록 점점 빨라집니다</li>
         <li>기회는 한 번뿐입니다</li>
-        <li><b>성공 기준 오차 0.15% 이내</b></li>
+        <li><b>[성공기준]</b> 오차 0.15% 이내</li>
       </ul>
     </aside>
   </div>
@@ -172,15 +172,20 @@ function frame(now) {
   raf = requestAnimationFrame(frame);
 }
 
+// 자르기 전에 띄워 두는 한 줄. 자르고 나면 좌우 비율이 이 자리를 대신한다.
+// 칼이 지금 어디쯤인지는 절대 숫자로 보여주지 않는다. 그러면 눈이 아니라
+// 숫자를 보고 누르게 되어 게임이 아니게 된다.
+const GUIDE = "떡을 정확히 <b>반</b>으로 자르면 성공";
+
 function reset() {
   cancelAnimationFrame(raf);
   state = "ready";
-  ratio.textContent = "";
+  ratio.innerHTML = GUIDE;
   slot.innerHTML = "";
   knife.classList.remove("stopped");
   cake.classList.remove("ok", "fail");     // 떡을 온전한 모습으로 되돌린다
   drawKnife(0);
-  go.textContent = "시 작";
+  go.textContent = "도 전";
 }
 
 function start() {
@@ -194,7 +199,7 @@ function start() {
   wavePhi = Math.random() * Math.PI * 2;
 
   state = "running";
-  ratio.textContent = "";
+  ratio.innerHTML = GUIDE;               // 자르는 동안에도 그대로 둔다
   slot.innerHTML = "";
   knife.classList.remove("stopped");
   cake.classList.remove("ok", "fail");

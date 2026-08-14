@@ -143,6 +143,21 @@ addEventListener("DOMContentLoaded", () => {
   });
 });
 
+/* 시작 버튼 옆에 홈으로 나가는 버튼을 붙인다.
+   게임마다 .controls 를 따로 적어 두고 있어서, 파일 12개를 다 고치는 대신
+   여기서 한 번에 넣는다. 새 게임을 만들어도 저절로 따라온다. */
+addEventListener("DOMContentLoaded", () => {
+  const box = document.querySelector(".controls");
+  if (!box || box.querySelector(".btn.home")) return;
+
+  const a = document.createElement("a");
+  a.className = "btn home";
+  a.href = "index.html";
+  a.textContent = "홈화면";
+  a.title = "게임 목록으로";
+  box.appendChild(a);
+});
+
 /* 판정 순간의 화면 연출.
    성공은 초록 빛이 한 번 퍼지고, 실패는 화면이 짧게 흔들린다.
    verdictHtml 안에서 같이 불러 주므로 게임 쪽은 손댈 것이 없다. */

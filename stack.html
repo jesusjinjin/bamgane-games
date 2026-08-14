@@ -6,9 +6,9 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>돌탑 쌓기</title>
-<link rel="stylesheet" href="common.css?v=38">
-<script src="common.js?v=38"></script>
-<script src="sound.js?v=38"></script>
+<link rel="stylesheet" href="common.css?v=48">
+<script src="common.js?v=48"></script>
+<script src="sound.js?v=48"></script>
 <style>
   :root { --accent-1: #0ea5e9; --accent-2: #4f46e5; }
 
@@ -64,7 +64,7 @@
         <div class="status" id="status"></div>
         <div class="slot" id="slot"></div>
         <div class="controls">
-          <button class="btn" id="go">시 작</button>
+          <button class="btn" id="go">도 전</button>
           <div class="hint">스페이스바로 내려놓기</div>
         </div>
       </div>
@@ -77,7 +77,7 @@
         <li>어긋난 만큼 돌이 깎입니다</li>
         <li>완전히 빗나가면 즉시 실패</li>
         <li>기회는 한 번뿐입니다</li>
-        <li><b>성공 기준 14층</b></li>
+        <li><b>[성공기준]</b> 14층 쌓기</li>
       </ul>
     </aside>
   </div>
@@ -121,8 +121,15 @@ function reset() {
   cur = null;
   slot.innerHTML = "";
   status.innerHTML = "<b>" + R.layers + "</b>층까지 쌓으면 성공";
-  go.textContent = "시 작";
+  go.textContent = "도 전";
   draw();
+}
+
+// 게임 중에는 지금 몇 층인지를 보여준다.
+// 목표만 띄워 두면 쌓는 동안 내가 어디까지 왔는지 셀 수가 없다.
+function showFloor() {
+  status.innerHTML = "<b>" + tower.length + "</b>층 &nbsp;·&nbsp; 목표 <b>"
+                   + R.layers + "</b>층";
 }
 
 function start() {
@@ -131,6 +138,7 @@ function start() {
   tower = [{ x: (W - R.barW) / 2, w: R.barW }];
   spawn();
   slot.innerHTML = "";
+  showFloor();
   go.textContent = "내려놓기";
   lastFrame = 0;
   raf = requestAnimationFrame(loop);
@@ -181,6 +189,7 @@ function drop() {
 
   tower.push({ x: left, w: overlap });
   Sound.crackle(1 + (1 - overlap / top.w) * 2);
+  showFloor();
 
   // 화면 밖으로 나가지 않게 시야를 올린다
   if (tower.length > VIEW_ROWS) camera = (tower.length - VIEW_ROWS) * BH;
@@ -233,15 +242,17 @@ function draw() {
   ctx.fillStyle = "rgba(28, 32, 26, .30)";
   roundRect(0, panelTop, W, BASE_Y + 10 - panelTop, 16);
   ctx.fill();
+  // 목표선은 하늘색으로. 흰색이면 돌빛·흙길과 섞여 그냥 무늬처럼 보인다.
+  // 이 게임의 타일색(#0ea5e9)과 같은 계열이라 화면이 따로 놀지 않는다.
+  //
+  // 선 옆에 "14층" 이라고 적어 두었었는데 뺐다.
+  // 아래 안내줄이 이미 "N층 · 목표 14층" 을 말해 주고 있어서 같은 말이 두 번 나온다.
   if (goalY > 6) {
-    ctx.strokeStyle = "rgba(255,255,255,.42)";
+    ctx.strokeStyle = "rgba(125, 211, 252, .85)";
     ctx.setLineDash([7, 7]);
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(0, goalY); ctx.lineTo(W, goalY); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(255,255,255,.85)";
-    ctx.font = "700 13px 'Malgun Gothic', sans-serif";
-    ctx.fillText(R.layers + "층", 8, goalY - 6);
   }
 
   // 쌓인 돌
