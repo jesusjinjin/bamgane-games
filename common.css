@@ -1,0 +1,268 @@
+/* ─────────────────────────────────────────────────────────────
+   밤가네 미니게임 — 공통 디자인
+   모든 화면이 같은 크기의 무대(stage) 위에 그려진다.
+   창을 어떻게 늘려도 비율이 고정되므로 OBS 구도가 틀어지지 않는다.
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* 무대 크기 — 이 값이 모든 게임에서 동일하다.
+     16:9 로 둔 이유: OBS 방송 화면과 같은 비율이라 창 캡처가 딱 맞고,
+     배경 그림도 별도 주문 없이 그대로 들어간다. */
+  --stage-w: 1280px;
+  --stage-h: 720px;
+
+  --bg:        #1a1a2e;
+  --bg-top:    #1e1e36;
+  --surface:   #1e2839;
+  --surface-2: #182030;
+  --line:      #344054;
+  --line-soft: #2a3446;
+
+  --text:      #ffffff;
+  --text-dim:  #94a3b8;
+  --text-faint:#64748b;
+
+  --radius:    16px;
+  --radius-sm: 12px;
+
+  /* 게임마다 이 두 개만 바꾸면 강조색이 통째로 바뀐다 */
+  --accent-1: #ec4899;
+  --accent-2: #e11d48;
+
+  /* 성공은 게임 색과 상관없이 항상 초록. 한눈에 알아보게 한다. */
+  --ok: #22c55e;
+
+  /* 시작·다시 버튼도 게임 색과 무관하게 항상 같은 핑크로 둔다.
+     게임을 바꿔도 "누르는 자리"가 늘 같은 색이라 헷갈리지 않는다. */
+  --btn-1: #ec4899;
+  --btn-2: #e11d48;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Pretendard Variable", Pretendard, "맑은 고딕", "Malgun Gothic",
+               -apple-system, "Segoe UI", sans-serif;
+  -webkit-user-select: none; user-select: none;
+  overflow: hidden;
+}
+
+/* 무대를 화면 가운데에 두고, 창 크기에 맞춰 통째로 확대·축소한다 */
+#fit {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: var(--bg);
+}
+/* 확대 배율(--fit)을 변수로 둔다.
+   흔들림 같은 연출이 transform 을 덮어써도 배율이 풀리지 않게 하려는 것이다. */
+.stage {
+  width: var(--stage-w);
+  height: var(--stage-h);
+  position: relative;
+  transform-origin: center center;
+  transform: scale(var(--fit, 1));
+  background: linear-gradient(180deg, var(--bg-top), var(--bg));
+  overflow: hidden;
+}
+
+/* 화면이 켜질 때 한 번 부드럽게 떠오른다 */
+#fit { animation: fade-in .3s ease-out; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── 카드 ───────────────────────────────────────────────── */
+.card {
+  position: relative;
+  background: linear-gradient(145deg, var(--surface), var(--surface-2));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+/* 모서리에 강조색을 아주 옅게 깔아 카드마다 성격을 준다 */
+.card.tinted::before {
+  content: ""; position: absolute; inset: 0;
+  border-radius: inherit; pointer-events: none;
+  background: linear-gradient(145deg,
+              color-mix(in srgb, var(--accent-1) 16%, transparent),
+              transparent 55%,
+              color-mix(in srgb, var(--accent-2) 14%, transparent));
+}
+
+/* ── 아이콘 타일 ─────────────────────────────────────────── */
+.tile {
+  display: grid; place-items: center;
+  width: 64px; height: 64px;
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, var(--accent-1), var(--accent-2));
+  box-shadow: 0 14px 24px -10px rgba(0, 0, 0, .7);
+}
+.tile svg { width: 34px; height: 34px; stroke: #fff; fill: none;
+            stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.tile.sm { width: 44px; height: 44px; border-radius: 12px; }
+.tile.sm svg { width: 24px; height: 24px; }
+
+/* ── 게임 화면 상단 바 ───────────────────────────────────── */
+.topbar {
+  height: 88px; display: flex; align-items: center; gap: 14px;
+  padding: 0 28px; background: rgba(22, 22, 40, .92);
+  border-bottom: 1px solid var(--line-soft);
+}
+.back {
+  width: 38px; height: 38px; display: grid; place-items: center;
+  border-radius: 10px; color: var(--text-dim);
+  font-size: 22px; text-decoration: none; cursor: pointer;
+}
+.back:hover { background: rgba(255, 255, 255, .06); color: #fff; }
+.titles h1 { font-size: 19px; font-weight: 700; letter-spacing: -.2px; }
+.titles p  { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+
+/* 소리 끄기 — 상단 바 오른쪽 끝 */
+.mute {
+  margin-left: auto; width: 40px; height: 40px;
+  display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--line-soft); border-radius: 11px;
+  background: transparent; color: var(--text-dim);
+}
+.mute:hover { background: rgba(255, 255, 255, .06); color: #fff; }
+.mute svg { width: 19px; height: 19px; stroke: currentColor; fill: none;
+            stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mute.off { color: var(--text-faint); }
+
+/* ── 게임 화면 본문: 게임 영역 + 우측 규칙 ─────────────────
+   규칙 카드는 자리를 차지하지 않고 떠 있다.
+   한 칸을 내주면 게임이 그만큼 왼쪽으로 밀려서, 화면 한가운데에
+   있어야 할 게임 요소가 무대 중심에서 벗어난다. */
+.body {
+  position: absolute; inset: 88px 0 0 0;
+  display: grid; grid-template-columns: 1fr;
+  padding: 24px 28px 28px;
+}
+.play { display: grid; place-items: center; }
+.rules {
+  position: absolute; right: 28px; top: 24px; width: 236px;
+  padding: 20px 20px 22px;
+}
+.rules h2 { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 14px; }
+.rules li { list-style: none; font-size: 12.5px; color: #cbd5e1;
+            line-height: 1.5; padding-left: 12px; position: relative; margin-bottom: 9px; }
+.rules li::before { content: "·"; position: absolute; left: 0; color: var(--text-faint); }
+/* 성공 기준 줄은 한눈에 들어오게 */
+.rules li b { color: #fff; font-weight: 700; }
+
+/* ── 버튼 ───────────────────────────────────────────────────
+   시작 · 자르기 · 다시가 모두 같은 버튼이다. 글자만 바뀐다.
+   그래서 크기와 위치가 저절로 맞는다. */
+.btn {
+  font: inherit; font-weight: 800;
+  font-size: var(--verdict-size); letter-spacing: 8px;
+  color: #fff; cursor: pointer; box-sizing: border-box;
+  /* 위쪽 성공·실패 칸과 크기를 정확히 맞추기 위해 테두리 두께까지 같게 둔다.
+     아래쪽 여백을 줄인 만큼 ::after 안내 문구가 들어간다. */
+  border: 2px solid transparent;
+  min-width: 260px; padding: 6px 40px 5px; border-radius: 14px;
+  background: linear-gradient(145deg, var(--btn-1), var(--btn-2));
+  box-shadow: 0 14px 26px -14px var(--btn-2);
+}
+.btn:hover  { filter: brightness(1.08); }
+.btn:active { transform: translateY(1px); }
+
+/* 조작 안내는 버튼 안에 넣는다. 버튼 글자가 시작→자르기→다시 로 바뀌어도
+   남아 있어야 하므로 ::after 로 붙인다. */
+.btn::after {
+  content: "(space)"; display: block;
+  font-size: 12px; font-weight: 600; letter-spacing: 0;
+  opacity: .75; margin-top: 3px;
+}
+.hint { display: none; }
+
+/* ── 판정 ───────────────────────────────────────────────────
+   "성공 · 오차 · 다시" 세 글자 크기를 하나로 맞춘다.
+   성공 기준만 작게 남겨 참고용으로 둔다. */
+:root { --verdict-size: 30px; }
+
+.verdict { text-align: center; }
+/* 성공·실패 칸은 아래 버튼과 똑같은 크기로 맞춘다 */
+.verdict .mark {
+  display: inline-block; box-sizing: border-box;
+  min-width: 260px; padding: 14px 40px; border-radius: 14px;
+  font-size: var(--verdict-size); font-weight: 800; letter-spacing: 8px;
+  border: 2px solid transparent;
+}
+/* 아래 버튼은 색이 꽉 차 있어 더 커 보인다.
+   판정 칸에도 옅은 배경을 깔아 두 블록의 무게를 맞춘다. */
+.verdict.ok .mark {
+  border-color: var(--ok); color: #eafff2;
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+}
+.verdict.fail .mark {
+  border-color: var(--line); color: #cbd5e1;
+  background: rgba(255, 255, 255, .05);
+}
+.verdict .detail { margin-top: 18px; font-size: var(--verdict-size); font-weight: 800; }
+.verdict .sub    { margin-top: 8px; font-size: 12.5px; color: var(--text-dim); }
+
+/* ── 판정 연출 ───────────────────────────────────────────────
+   결과가 툭 나타나기만 하면 방송에서 순간이 안 산다.
+   성공은 초록 광채가 한 번 퍼지고, 실패는 화면이 짧게 흔들린다. */
+
+.verdict { animation: verdict-in .34s cubic-bezier(.2, .9, .25, 1.35) both; }
+@keyframes verdict-in {
+  from { opacity: 0; transform: translateY(12px) scale(.93); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* 성공 칸에서 초록 테두리가 한 번 퍼져 나간다 */
+.verdict.ok .mark { animation: mark-pulse 1s ease-out .1s; }
+@keyframes mark-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 18px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+/* 실패 칸은 고개를 젓듯 좌우로 */
+.verdict.fail .mark { animation: mark-no .3s ease-out .06s; }
+@keyframes mark-no {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-7px); }
+  75%      { transform: translateX(7px); }
+}
+
+/* 무대 전체에 한 번 덮이는 빛. 가장자리에서 안쪽으로 스민다.
+   기본값을 투명으로 둔다. 애니메이션이 돌지 않는 상황에서도
+   덮개가 화면에 남지 않게 하려는 것이다. */
+.fx { position: absolute; inset: 0; pointer-events: none; z-index: 5; opacity: 0; }
+.fx-ok {
+  background: radial-gradient(ellipse at center, transparent 42%,
+              color-mix(in srgb, var(--ok) 34%, transparent) 100%);
+  animation: fx-bloom .66s ease-out forwards;
+}
+@keyframes fx-bloom {
+  0%   { opacity: 0; transform: scale(1.07); }
+  20%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1); }
+}
+.fx-fail {
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(225, 29, 72, .36) 100%);
+  animation: fx-hit .42s ease-out forwards;
+}
+@keyframes fx-hit {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* 흔들림에도 확대 배율을 그대로 물려준다. 안 그러면 화면이 튄다. */
+.stage.shake { animation: stage-shake .34s ease-out; }
+@keyframes stage-shake {
+  0%, 100% { transform: scale(var(--fit, 1)) translate(0, 0); }
+  15%      { transform: scale(var(--fit, 1)) translate(-8px, 3px); }
+  35%      { transform: scale(var(--fit, 1)) translate(7px, -3px); }
+  55%      { transform: scale(var(--fit, 1)) translate(-5px, 2px); }
+  78%      { transform: scale(var(--fit, 1)) translate(3px, -1px); }
+}
+
+/* 움직임을 줄여 달라는 설정이면 연출을 모두 끈다 */
+@media (prefers-reduced-motion: reduce) {
+  #fit, .verdict, .verdict .mark, .fx, .stage.shake { animation: none; }
+  .fx { display: none; }
+}
