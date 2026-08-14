@@ -7,12 +7,23 @@
    값은 사람의 오차 분포로 시뮬레이션해 성공률 5% 안팎으로 잡은 것이다.
    실제로 해보고 쉽거나 어려우면 이 숫자를 조정한다. */
 const RULES = {
-  ricecut:  { tolPct: 0.25, sweepMin: 2.2, sweepMax: 3.2 }, // 오차 %, 편도 시간(초)
-  schulte:  { limitSec: 7.1, count: 12 },                   // 제한 시간, 숫자 개수
+  // 칼은 좌우로 왕복하되 속도가 계속 변한다. 등속으로 두면 박자를 세서 맞출 수 있다.
+  // 오차는 이미 2.3px 라 더 줄일 수 없어서, 대신 예측을 깨는 쪽으로 어렵게 만들었다.
+  // 속도를 두 갈래로 나눠 준다.
+  //   ① 자리에 따라 — 양 끝에서 느리고 가운데(성공선)에서 빠르다. 항상 그렇다.
+  //   ② 시간에 따라  — 판 전체 박자가 오르내린다. 박자를 못 세게 하는 몫.
+  // ①이 없으면 ②의 느린 구간이 성공선과 겹쳐서 거저 주는 판이 나온다.
+  ricecut:  { tolPct: 0.15,                     // 성공 오차 % (떡 폭 910px 기준 1.37px)
+              sweepMin: 2.4, sweepMax: 2.9,     // 편도 기준 시간(초)
+              centerMin: 0.50, centerMax: 0.65, // 가운데 가속. 끝은 (1-값)배, 가운데는 (1+값)배
+              waveMin: 0.15, waveMax: 0.25,     // 시간에 따른 흔들림 폭 (±비율)
+              wavePMin: 1.6, wavePMax: 2.8,     // 그 주기(초). 편도와 안 맞물리게 잡는다
+              creep: 0.05 },                    // 초당 이만큼씩 빨라진다 (오래 못 끌게)
+  schulte:  { limitSec: 5.0, count: 12 },                   // 제한 시간, 숫자 개수
   wire:     { halfWidth: 3.9 },                             // 통로 반폭(px)
   // 목표 시각은 매판 8~10초 사이에서 0.1초 간격으로 뽑는다. 외워서 못 하게.
   stopwatch:{ minTarget: 8.0, maxTarget: 10.0, targetStep: 0.1, places: 2 },
-  curling:  { targetR: 7 },                                 // 목표 반지름(px)
+  curling:  { targetR: 10 },                                 // 목표 반지름(px)
   stack:    { layers: 14, barW: 54 },                       // 층수, 막대 너비
   // 회차마다 제한이 짧아진다. 소수점 둘째 자리에서 딱 떨어지는 값만 쓴다.
   // 어중간한 값이면 화면 표시(반올림)와 실제 판정이 어긋난다.
@@ -41,17 +52,41 @@ const RULES = {
 };
 
 /* 무대를 창 크기에 맞춰 통째로 확대·축소한다.
-   이래야 어떤 창 크기에서도 화면 구성이 똑같이 유지된다. */
+   이래야 어떤 창 크기에서도 화면 구성이 똑같이 유지된다.
+
+   게임은 PC 방송용이다. 무대는 1280×720 으로 못 박혀 있고 그 안의 좌표·크기·
+   판정 기준은 어떤 기기에서도 건드리지 않는다. 바꾸는 것은 마지막에 화면에
+   얹는 방법뿐이다.
+
+   휴대폰을 세로로 들면 폭이 375px 남짓이다. 가로로 긴 무대를 그대로 넣으면
+   0.29배까지 줄어들어 15px 글자가 4px 가 된다. 읽을 수가 없다.
+   그래서 세로일 때는 무대를 통째로 90도 눕힌다. 같은 화면에 0.52배로 들어가서
+   1.8배 커진다. 사용자는 휴대폰을 돌려 잡으면 된다.
+
+   눕히는 것은 CSS 변환일 뿐이라 게임 쪽은 아무것도 달라지지 않는다.
+   배율이 균일해서 모든 비율이 그대로고, 판정은 % 기준이라 배율과 무관하다.
+   터치 좌표도 브라우저가 알아서 되짚어 준다.
+
+   태블릿은 세로로도 0.6배라 읽을 만해서 눕히지 않는다. */
+const ROTATE_MAX_W = 600;      // 이 폭 아래에서 세로면 눕힌다 (휴대폰만)
+
 function fitStage() {
   const stage = document.querySelector(".stage");
   if (!stage) return;
   const cs = getComputedStyle(document.documentElement);
   const w = parseFloat(cs.getPropertyValue("--stage-w"));
   const h = parseFloat(cs.getPropertyValue("--stage-h"));
-  const k = Math.min(innerWidth / w, innerHeight / h);
+
+  const 눕힌다 = innerHeight > innerWidth && innerWidth <= ROTATE_MAX_W;
+  // 눕히면 화면의 가로세로가 뒤바뀐 셈이 된다
+  const vw = 눕힌다 ? innerHeight : innerWidth;
+  const vh = 눕힌다 ? innerWidth  : innerHeight;
+  const k = Math.min(vw / w, vh / h);
+
   // transform 을 직접 쓰지 않고 변수로 넘긴다.
   // 흔들림 연출이 transform 을 덮어써도 배율이 풀리지 않는다.
   stage.style.setProperty("--fit", k);
+  stage.style.setProperty("--rot", 눕힌다 ? "90deg" : "0deg");
 }
 addEventListener("resize", fitStage);
 addEventListener("DOMContentLoaded", fitStage);

@@ -54,16 +54,23 @@ html, body {
 #fit {
   position: fixed; inset: 0;
   display: grid; place-items: center;
+  /* 트랙 크기를 화면에 못 박는다.
+     이 줄이 없으면 트랙이 무대 원본 폭(1280px)까지 늘어난다.
+     화면이 그보다 좁으면 — 휴대폰 세로가 그렇다 — 무대가 통째로
+     화면 밖으로 밀려나 아무것도 안 보인다. 축소는 되지만 자리가 틀린다. */
+  grid-template: 100% / 100%;
+  overflow: hidden;
   background: var(--bg);
 }
-/* 확대 배율(--fit)을 변수로 둔다.
-   흔들림 같은 연출이 transform 을 덮어써도 배율이 풀리지 않게 하려는 것이다. */
+/* 확대 배율(--fit)과 회전(--rot)을 변수로 둔다.
+   흔들림 같은 연출이 transform 을 덮어써도 배율이 풀리지 않게 하려는 것이다.
+   --rot 은 휴대폰 세로 화면에서만 90deg 가 된다. 아래 fitStage 참고. */
 .stage {
   width: var(--stage-w);
   height: var(--stage-h);
   position: relative;
   transform-origin: center center;
-  transform: scale(var(--fit, 1));
+  transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1));
   background: linear-gradient(180deg, var(--bg-top), var(--bg));
   overflow: hidden;
 }
@@ -254,11 +261,11 @@ html, body {
 /* 흔들림에도 확대 배율을 그대로 물려준다. 안 그러면 화면이 튄다. */
 .stage.shake { animation: stage-shake .34s ease-out; }
 @keyframes stage-shake {
-  0%, 100% { transform: scale(var(--fit, 1)) translate(0, 0); }
-  15%      { transform: scale(var(--fit, 1)) translate(-8px, 3px); }
-  35%      { transform: scale(var(--fit, 1)) translate(7px, -3px); }
-  55%      { transform: scale(var(--fit, 1)) translate(-5px, 2px); }
-  78%      { transform: scale(var(--fit, 1)) translate(3px, -1px); }
+  0%, 100% { transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1)) translate(0, 0); }
+  15%      { transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1)) translate(-8px, 3px); }
+  35%      { transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1)) translate(7px, -3px); }
+  55%      { transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1)) translate(-5px, 2px); }
+  78%      { transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1)) translate(3px, -1px); }
 }
 
 /* 움직임을 줄여 달라는 설정이면 연출을 모두 끈다 */
@@ -266,3 +273,4 @@ html, body {
   #fit, .verdict, .verdict .mark, .fx, .stage.shake { animation: none; }
   .fx { display: none; }
 }
+

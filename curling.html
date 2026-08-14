@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="cache-control" content="no-cache">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
+<title>조약돌 밀기</title>
+<link rel="stylesheet" href="common.css?v=38">
+<script src="common.js?v=38"></script>
+<script src="sound.js?v=38"></script>
+<style>
+  :root { --accent-1: #f59e0b; --accent-2: #ea580c; }
+
+  /* 겨울 우물가. 가운데 얼음판이 돌이 미끄러지는 길이다. */
+  .stage { background: url('assets/curling/bg.webp') center / cover no-repeat; }
+  .topbar { background: rgba(22, 22, 40, .42); }
+  .stage::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(180deg, rgba(16,20,28,.20) 0%, rgba(16,20,28,.02) 26%,
+                                        rgba(16,20,28,.20) 62%, rgba(16,20,28,.50) 100%);
+  }
+  .body { z-index: 1; }
+
+  /* 판정 → 얼음판 → 안내 → 버튼. 140 + 300 + 28 + 68 = 536 */
+  .board { width: 100%; display: grid; justify-items: center;
+           grid-template-rows: 140px 300px 28px auto; align-content: center; }
+  .slot    { display: grid; place-items: center; order: 1; align-self: end; }
+  .iceslot { display: grid; place-items: center; order: 2; }
+  .status  { order: 3; align-self: center; }
+  .controls{ text-align: center; order: 4; }
+
+  /* 얼음판은 배경 그림이 맡는다. 캔버스는 돌과 과녁만 그린다. */
+  canvas { cursor: grab; touch-action: none; }
+  canvas.idle { cursor: default; }
+  canvas.pulling { cursor: grabbing; }
+
+  .status { font-size: 15px; color: var(--text-dim); letter-spacing: .3px;
+            text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+  .status b { color: #fff; font-size: 17px; }
+  .verdict .detail { text-shadow: 0 3px 10px rgba(0,0,0,.9); }
+  .verdict .sub { display: none; }
+  .verdict .mark { background: rgba(16,20,26,.72); }
+  .verdict.ok .mark { background: rgba(16,40,26,.72); border-color: #4ade80; }
+</style>
+</head>
+<body>
+<div id="fit"><div class="stage">
+
+  <div class="topbar">
+    <a class="back" href="index.html" title="목록으로">←</a>
+    <div class="tile sm"><svg viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/>
+      <circle cx="12" cy="12" r="1.2"/></svg></div>
+    <div class="titles">
+      <h1>조약돌 밀기</h1>
+      <p>Mini Curling</p>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="play">
+      <div class="board">
+        <div class="iceslot"><canvas id="cv" width="900" height="240" class="idle"></canvas></div>
+        <div class="status" id="status"></div>
+        <div class="slot" id="slot"></div>
+        <div class="controls">
+          <button class="btn" id="go">시 작</button>
+          <div class="hint">돌을 뒤로 당겼다 놓기</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rules card">
+      <h2>규칙</h2>
+      <ul>
+        <li>돌을 뒤로 당겼다 놓으세요</li>
+        <li>많이 당길수록 멀리 갑니다</li>
+        <li>과녁 한가운데 멈춰야 성공</li>
+        <li>기회는 한 번뿐입니다</li>
+        <li><b>성공 기준 과녁 10px 이내</b></li>
+      </ul>
+    </aside>
+  </div>
+
+</div></div>
+
+<script>
+"use strict";
+
+const R = RULES.curling;
+const cv     = document.getElementById("cv");
+const ctx    = cv.getContext("2d");
+const status = document.getElementById("status");
+const slot   = document.getElementById("slot");
+const go     = document.getElementById("go");
+
+const W = cv.width, H = cv.height;
+const CY = H / 2;
+const START_X = 80;              // 돌이 출발하는 자리
+const STONE_R = 15;              // 판정은 중심 좌표로 한다. 이 값은 보기용 크기다.
+const MAX_PULL = 150;            // 최대로 당길 수 있는 거리
+
+// 조약돌 그림. 판정은 중심 좌표로 하므로 그림 크기는 보기용일 뿐이다.
+const stoneImg = new Image();
+let stoneReady = false;
+stoneImg.onload = () => { stoneReady = true; draw(); };
+stoneImg.src = "assets/curling/stone.webp";
+
+let state = "ready";             // ready | aiming | sliding | done
+let stone = { x: START_X, y: CY, vx: 0, vy: 0 };
+let targetX = 0;                 // 과녁 중심 (매판 조금씩 달라진다)
+let pulling = false;
+let pull = { x: 0, y: 0 };       // 당긴 정도
+let anim = 0;
+
+// 얼음 마찰은 고정한다. 매판 다르게 하면 같은 세기로 당겨도 결과가 140px 넘게
+// 벌어져서 실력이 아니라 운으로 갈린다.
+const FRICTION = 0.982;
+// 당긴 거리를 속도로 바꾸는 비율. 과녁 범위가 당김 구간의 한가운데 오도록 맞췄다.
+const POWER = 0.094;
+
+function newRound() {
+  // 과녁 위치만 매판 다르게 → 눈으로 보고 세기를 가늠하는 것이 실력이 된다.
+  // 캔버스를 넓히면서 출발점이 16px 밀렸으므로 과녁도 같이 밀어 거리를 지킨다.
+  targetX = 486 + Math.random() * 190;
+  stone = { x: START_X, y: CY, vx: 0, vy: 0 };
+  pull = { x: 0, y: 0 };
+  pulling = false;
+}
+
+function drawTarget() {
+  // 과녁: 안쪽 원 두 개만. 바깥 큰 원들은 눈밭을 어지럽히기만 해서 뺐다.
+  // 눈밭 위라 붉은 기가 도는 색이라야 눈에 띈다.
+  // 원이 하나뿐이라 테두리를 진하게 해야 멀리서도 보인다.
+  ctx.beginPath(); ctx.arc(targetX, CY, R.targetR * 2.6, 0, 6.2832);
+  ctx.fillStyle = "rgba(190, 60, 40, .22)"; ctx.fill();
+  ctx.strokeStyle = "rgba(180, 55, 38, .70)"; ctx.lineWidth = 2; ctx.stroke();
+  // 성공 범위 — 여기 멈춰야 한다
+  ctx.beginPath(); ctx.arc(targetX, CY, R.targetR, 0, 6.2832);
+  ctx.fillStyle = "rgba(200, 60, 44, .62)";
+  ctx.fill();
+  ctx.strokeStyle = "#e2564a"; ctx.lineWidth = 2.5; ctx.stroke();
+}
+
+function drawStone() {
+  // 당기는 동안 돌이 조금만 뒤로 물러난다.
+  // 눌리고 있다는 것만 알려줄 뿐, 세기를 재기에는 턱없이 작다.
+  const k = pulling ? 0.16 : 0;
+  const x = stone.x - pull.x * k;
+  const y = stone.y - pull.y * k;
+
+  if (stoneReady) {
+    // 컬링 스톤은 납작하다. 그림(96×96) 안에서 돌 몸통은 가로 84 · 세로 52 를 쓴다.
+    // 몸통 가로가 44px 로 보이도록 역산해서 그린다. 세로는 27px 쯤 된다.
+    const d = 44 * 96 / 84;
+    ctx.drawImage(stoneImg, x - d / 2, y - d / 2, d, d);
+    return;
+  }
+  // 그림이 아직 안 왔을 때만 쓰는 대체 모양
+  const g = ctx.createRadialGradient(x - 4, y - 5, 2, x, y, STONE_R);
+  g.addColorStop(0, "#e6edf7");
+  g.addColorStop(1, "#8fa3bd");
+  ctx.beginPath(); ctx.arc(x, y, STONE_R, 0, 6.2832);
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = "#5b6b83"; ctx.lineWidth = 2; ctx.stroke();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 얼음결은 배경 그림이 맡는다. 여기서는 돌이 지나는 길만 옅게 띄워 준다.
+  ctx.fillStyle = "rgba(70, 92, 120, .16)";
+  ctx.fillRect(0, CY - 62, W, 124);
+
+  // 출발선
+  ctx.strokeStyle = "rgba(40,60,86,.45)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 7]);
+  ctx.beginPath(); ctx.moveTo(START_X, CY - 58); ctx.lineTo(START_X, CY + 58); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 과녁은 시작 전에는 감춘다. 자리가 매판 바뀌므로 미리 보여줄 이유가 없고,
+  // 시작하는 순간 나타나야 "이번 판은 여기구나" 가 눈에 들어온다.
+  if (state !== "ready") drawTarget();
+
+  // 조준선은 그리지 않는다. 방향과 세기를 눈으로 읽을 수 있으면 너무 쉬워진다.
+  // 손이 얼마나 움직였는지만으로 가늠해야 한다.
+  drawStone();
+}
+
+function toCanvas(ev) {
+  const b = cv.getBoundingClientRect();
+  return { x: (ev.clientX - b.left) * (W / b.width),
+           y: (ev.clientY - b.top)  * (H / b.height) };
+}
+
+// 과녁 중심까지의 거리. 굴러가는 중에 보여주는 값과 마지막 판정값은
+// 반드시 같은 자로 재야 한다. 예전에는 화면에 가로 거리만 띄우고 판정은
+// 가로세로를 함께 봐서, 비스듬히 민 판은 "0px" 이라고 떠 있다가
+// 멈추는 순간 갑자기 80px 로 튀었다.
+function distToTarget() {
+  return Math.hypot(stone.x - targetX, stone.y - CY);
+}
+
+// 물리는 실제로 흐른 시간으로 굴린다. 프레임 수로 세면 144Hz 모니터에서
+// 같은 거리를 2.4배 빨리 지나가 버려서 사람마다 체감이 달라진다.
+const STEP = 1 / 60;             // 계산 기준 한 칸 (초). 이 값이 예전 한 프레임이다.
+let lastT = 0, carry = 0;
+
+function slide(now) {
+  // 흐른 시간만큼 예전과 똑같은 계산을 여러 번 돌린다.
+  // 이러면 어떤 주사율에서도 굴러가는 거리와 시간이 같아진다.
+  const dt = lastT ? Math.min(0.1, (now - lastT) / 1000) : STEP;
+  lastT = now;
+  carry += dt;
+
+  let out = false;
+  while (carry >= STEP) {
+    carry -= STEP;
+    stone.x += stone.vx;
+    stone.y += stone.vy;
+    stone.vx *= FRICTION;
+    stone.vy *= FRICTION;
+
+    // 위아래 벽에 부딪히면 튕긴다
+    if (stone.y < STONE_R + 2)     { stone.y = STONE_R + 2;     stone.vy = -stone.vy * .7; }
+    if (stone.y > H - STONE_R - 2) { stone.y = H - STONE_R - 2; stone.vy = -stone.vy * .7; }
+
+    if (stone.x > W - STONE_R) { out = true; break; }
+    if (Math.hypot(stone.vx, stone.vy) <= 0.06) break;
+  }
+
+  const speed = Math.hypot(stone.vx, stone.vy);
+  status.innerHTML = "굴러가는 중 &nbsp;·&nbsp; <b>"
+                   + distToTarget().toFixed(1) + "</b>px";
+
+  draw();
+  if (speed > 0.06 && !out) {
+    anim = requestAnimationFrame(slide);
+  } else {
+    anim = 0;
+    judge(out);
+  }
+}
+
+function judge(out) {
+  const d = distToTarget();
+  const ok = !out && d <= R.targetR;
+  state = "done";
+  cv.classList.add("idle");
+
+  status.innerHTML = out
+    ? "과녁을 지나쳐 나갔습니다"
+    : "중심에서 <b>" + d.toFixed(1) + "</b>px";
+
+  slot.innerHTML = verdictHtml(ok,
+    out ? "지나침" : d.toFixed(1) + " px",
+    "");
+  go.textContent = "다 시";
+
+  if (ok) Sound.success(); else Sound.fail();
+  draw();
+}
+
+cv.addEventListener("pointerdown", (e) => {
+  if (state !== "aiming") return;
+  const p = toCanvas(e);
+  if (Math.hypot(p.x - stone.x, p.y - stone.y) > 30) return;
+  pulling = true;
+  cv.classList.add("pulling");
+  cv.setPointerCapture(e.pointerId);
+  status.innerHTML = "뒤로 당겼다 놓으세요";
+  draw();
+});
+
+cv.addEventListener("pointermove", (e) => {
+  if (!pulling) return;
+  const p = toCanvas(e);
+  let dx = stone.x - p.x, dy = stone.y - p.y;
+  const len = Math.hypot(dx, dy);
+  if (len > MAX_PULL) { dx = dx / len * MAX_PULL; dy = dy / len * MAX_PULL; }
+  // 앞쪽으로는 당길 수 없다
+  pull = { x: Math.max(0, dx), y: dy };
+  draw();
+});
+
+cv.addEventListener("pointerup", () => {
+  if (!pulling) return;
+  pulling = false;
+  cv.classList.remove("pulling");
+  const power = Math.hypot(pull.x, pull.y);
+  if (power < 8) { draw(); return; }        // 살짝 건드린 건 무시
+
+  state = "sliding";
+  stone.vx = pull.x * POWER;
+  stone.vy = pull.y * POWER;
+  Sound.crackle(1.6);
+  lastT = 0; carry = 0;           // 시간 누적을 새로 시작한다
+  anim = requestAnimationFrame(slide);
+});
+
+function reset() {
+  cancelAnimationFrame(anim); anim = 0;
+  state = "ready";
+  newRound();
+  slot.innerHTML = "";
+  cv.classList.add("idle");
+  status.innerHTML = "과녁 한가운데 멈추면 성공";
+  go.textContent = "시 작";
+  draw();
+}
+
+function start() {
+  cancelAnimationFrame(anim); anim = 0;
+  state = "aiming";
+  newRound();
+  slot.innerHTML = "";
+  cv.classList.remove("idle");
+  status.innerHTML = "돌을 잡고 뒤로 당기세요";
+  go.textContent = "포 기";
+  draw();
+}
+
+function press() {
+  if (state === "ready") start();
+  else if (state === "aiming" || state === "sliding") {
+    cancelAnimationFrame(anim); anim = 0;
+    state = "done"; pulling = false;
+    cv.classList.add("idle");
+    slot.innerHTML = verdictHtml(false, "포기", "");
+    go.textContent = "다 시";
+  } else reset();
+}
+
+go.addEventListener("click", press);
+onPressKey(press);
+reset();
+</script>
+</body>
+</html>

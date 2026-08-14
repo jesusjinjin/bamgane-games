@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>밤가네 미니게임</title>
-<link rel="stylesheet" href="common.css?v=29">
+<link rel="stylesheet" href="common.css?v=38">
 <style>
   .hub { position: absolute; inset: 0; display: flex;
          flex-direction: column; align-items: center; padding-top: 34px; }
@@ -14,7 +14,7 @@
 
   /* 4열 4줄. 게임이 늘면 카드를 낮춰서 무대 안에 그대로 담는다. */
   .grid { margin-top: 20px; display: grid;
-          grid-template-columns: repeat(1, 236px); gap: 13px; }
+          grid-template-columns: repeat(3, 236px); gap: 13px; }
 
   .game {
     display: flex; flex-direction: column; align-items: center;
@@ -25,6 +25,13 @@
                 border-color: color-mix(in srgb, var(--accent-1) 55%, var(--line)); }
   .game .tile { width: 46px; height: 46px; border-radius: 12px; }
   .game .tile svg { width: 25px; height: 25px; }
+
+  /* 2D 그림 타일. 그림이 타일을 꽉 채우므로 밑에 깔린 색 그라데이션은 가려진다.
+     선 그림 타일보다 크게 잡는다 — 그림은 여백까지 그려져 있어서
+     같은 크기로 두면 알맹이가 오히려 작아 보인다. */
+  .game .tile.pic { width: 64px; height: 64px; border-radius: 15px;
+                    background: none; overflow: hidden; }
+  .game .tile.pic img { width: 100%; height: 100%; display: block; }
   .game .name { margin-top: 9px; font-size: 15px; font-weight: 700; }
   .game .go   { margin-top: 5px; font-size: 11.5px; color: var(--text-dim); }
 
@@ -44,13 +51,21 @@
   </div>
 </div></div>
 
-<script src="common.js?v=29"></script>
+<script src="common.js?v=38"></script>
 <script>
 "use strict";
 
 // 게임 목록. 여기에 한 줄 추가하면 허브에 바로 나온다.
+//
+// img 가 있으면 그 그림을 타일에 꽉 채워 넣고, 없으면 icon 의 선 그림을 쓴다.
+// 2D 로 바꾼 게임부터 하나씩 그림을 붙여 나간다.
 const GAMES = [
-  { file: "stack.html",     name: "돌탑 쌓기",       c1: "#0ea5e9", c2: "#4f46e5", icon: "stack" },
+  { file: "ricecut.html",   name: "떡 자르기",       c1: "#ec4899", c2: "#e11d48", icon: "knife",
+    img: "assets/_icons/ricecut.webp" },
+  { file: "curling.html",   name: "조약돌 밀기",     c1: "#f59e0b", c2: "#ea580c", icon: "target",
+    img: "assets/_icons/curling.webp" },
+  { file: "stack.html",     name: "돌탑 쌓기",       c1: "#0ea5e9", c2: "#4f46e5", icon: "stack",
+    img: "assets/_icons/stack.webp" },
 ];
 
 // 아이콘은 선으로만 그린다. 배경 타일 색이 게임을 구분해 준다.
@@ -92,8 +107,11 @@ for (const g of GAMES) {
   a.className = "game card tinted" + (g.soon ? " soon" : "");
   a.style.setProperty("--accent-1", g.c1);
   a.style.setProperty("--accent-2", g.c2);
-  a.innerHTML =
-      '<div class="tile"><svg viewBox="0 0 24 24">' + ICONS[g.icon] + "</svg></div>"
+  // 2D 그림이 있으면 타일을 그림으로 채우고, 없으면 예전 선 그림을 쓴다.
+  const tile = g.img
+    ? '<div class="tile pic"><img src="' + g.img + '" alt=""></div>'
+    : '<div class="tile"><svg viewBox="0 0 24 24">' + ICONS[g.icon] + "</svg></div>";
+  a.innerHTML = tile
     + '<div class="name">' + g.name + "</div>"
     + '<div class="go">' + (g.soon ? "준비 중" : "플레이 &nbsp;→") + "</div>";
   grid.appendChild(a);

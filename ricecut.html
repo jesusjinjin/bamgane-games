@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="cache-control" content="no-cache">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
+<title>떡 자르기</title>
+<link rel="stylesheet" href="common.css?v=38">
+<script src="common.js?v=38"></script>
+<style>
+  :root { --accent-1: #ec4899; --accent-2: #e11d48; }
+
+  /* 부엌 배경. 가운데 띠는 비어 있어서 떡과 글자가 잘 보인다. */
+  .stage { background: url('assets/ricecut/bg.webp') center / cover no-repeat; }
+  .topbar { background: rgba(22, 22, 40, .42); }
+  /* 배경 위에서도 글자가 읽히게 위아래를 살짝 눌러 준다 */
+  .stage::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(180deg, rgba(20,18,30,.22) 0%, rgba(20,18,30,.03) 26%,
+                                        rgba(20,18,30,.24) 62%, rgba(20,18,30,.52) 100%);
+  }
+  .body { z-index: 1; }
+
+  /* 판정 → 떡 → 좌우비율 → 버튼. 위에서 아래로 읽히고,
+     누르는 손 바로 위에 떡이 온다. 합이 580 이라 게임 영역 안에 들어간다. */
+  .board { width: 100%; display: grid; justify-items: center;
+           grid-template-rows: 150px 302px 28px auto; align-content: center; }
+  .slot     { display: grid; place-items: center; order: 1; align-self: end; }
+  .cakeslot { display: grid; place-items: center; order: 2; }
+  .ratio    { order: 3; }
+  .controls { text-align: center; order: 4; }
+
+  /* 떡 — 세 상태 그림이 같은 캔버스라 contain 으로 두면 크기가 저절로 맞는다 */
+  .cake {
+    position: relative; width: 910px; height: 183px;
+    background: url('assets/ricecut/cake-idle.webp') center / contain no-repeat;
+    filter: drop-shadow(0 10px 16px rgba(40, 30, 20, .40));
+  }
+  .cake.ok   { background-image: url('assets/ricecut/cake-ok.webp'); }
+  .cake.fail { background-image: url('assets/ricecut/cake-fail.webp'); }
+
+  /* 정답 위치 */
+  .cake .center { position: absolute; left: 50%; top: -8px; bottom: -8px;
+                  width: 2px; background: rgba(255,255,255,.26);
+                  transform: translateX(-50%); }
+
+  /* 칼 — left 는 왼쪽 모서리 기준이라 폭이 넓어지면 날 선이 그만큼 밀린다.
+     가운데로 당겨야 화면에 보이는 자리와 실제 판정 자리가 맞는다. */
+  .knife {
+    position: absolute; top: -114px; bottom: 124px; width: 60px;
+    background: url('assets/ricecut/knife.webp') center / contain no-repeat;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .5));
+  }
+  .knife.stopped { filter: drop-shadow(0 0 16px rgba(255,255,255,.85)); }
+
+  /* 잘린 뒤 좌우 비율 */
+  .ratio { font-size: 15px; color: var(--text-dim); letter-spacing: .3px;
+           text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+  .ratio b { color: #fff; font-size: 17px; }
+  .verdict .detail { text-shadow: 0 3px 10px rgba(0,0,0,.9); }
+  /* 성공 기준은 규칙 카드에 있으므로 판정에서는 뺀다 */
+  .verdict .sub { display: none; }
+  .verdict .mark { background: rgba(16,20,26,.72); }
+  .verdict.ok .mark { background: rgba(16,40,26,.72); border-color: #4ade80; }
+</style>
+</head>
+<body>
+<div id="fit"><div class="stage">
+
+  <div class="topbar">
+    <a class="back" href="index.html" title="목록으로">←</a>
+    <div class="tile sm"><svg viewBox="0 0 24 24">
+      <rect x="3" y="9" width="18" height="6" rx="3"/><path d="M12 3v18"/></svg></div>
+    <div class="titles">
+      <h1>떡 자르기</h1>
+      <p>Rice Cake Cut</p>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="play">
+      <div class="board">
+        <div class="cakeslot">
+          <div class="cake" id="cake">
+            <div class="center"></div>
+            <div class="knife" id="knife" style="left:0"></div>
+          </div>
+        </div>
+        <div class="ratio" id="ratio"></div>
+        <div class="slot" id="slot"></div>
+        <div class="controls">
+          <button class="btn" id="go">시 작</button>
+          <div class="hint">스페이스바</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rules card">
+      <h2>규칙</h2>
+      <ul>
+        <li>칼이 좌우로 왕복합니다</li>
+        <li>떡의 정확히 가운데서 자르세요</li>
+        <li>가운데를 지날 때 가장 빠릅니다</li>
+        <li>끌수록 점점 빨라집니다</li>
+        <li>기회는 한 번뿐입니다</li>
+        <li><b>성공 기준 오차 0.15% 이내</b></li>
+      </ul>
+    </aside>
+  </div>
+
+</div></div>
+
+<script>
+"use strict";
+
+const R = RULES.ricecut;
+const cake  = document.getElementById("cake");
+const knife = document.getElementById("knife");
+const ratio = document.getElementById("ratio");
+const slot = document.getElementById("slot");   // 판정이 들어갈 자리
+const go   = document.getElementById("go");     // 버튼은 하나뿐. 글자만 바뀐다.
+
+let state = "ready";      // ready | running | done
+let raf = 0, t0 = 0;
+let sweep = 2.6;          // 이번 판의 편도 기준 시간(초)
+let centerK = 0.58;       // 가운데 가속. 끝 (1-K)배, 가운데 (1+K)배
+let waveA = 0.2;          // 시간에 따라 빨라졌다 느려지는 폭
+let waveW = 3;            // 그 각속도
+let wavePhi = 0;          // 시작 시점의 위상. 매판 달라야 첫 통과부터 다르다
+
+// 칼이 지금까지 나아간 양. 속도가 시시각각 바뀌므로 시간에 그대로 비례하지 않는다.
+//
+// 프레임마다 조금씩 더하는 방식이 아니라 적분식을 그대로 쓴다.
+// 누른 순간의 위치를 그 시각만 가지고 정확히 되짚어야 하는데,
+// 성공 창이 10ms 안팎이라 프레임 단위로 누적하면 한 프레임 오차가 곧 오판이 된다.
+//
+//   속도(t) = 1 + creep·t + waveA·sin(waveW·t + wavePhi)
+//   나아간 양 = ∫ 속도 dt
+//
+// 속도는 항상 0보다 크다(waveA 가 1 미만이라). 즉 칼이 뒤로 가는 일은 없다.
+function advAt(sec) {
+  return sec
+       + R.creep * sec * sec / 2
+       + waveA * (Math.cos(wavePhi) - Math.cos(waveW * sec + wavePhi)) / waveW;
+}
+
+// 칼의 위치를 0~1 로 돌려준다. 0 = 왼쪽 끝, 1 = 오른쪽 끝.
+//
+// 나아간 양을 그대로 위치로 쓰지 않고 한 번 더 일그러뜨린다.
+// 양 끝에서는 뜸을 들이고 가운데는 훅 지나가게 하려는 것이다.
+//
+//   위치 = t - K·sin(2πt)/(2π)      (t 는 0~1 로 편 왕복 위상)
+//   속도 = 1 - K·cos(2πt)           → 끝 (1-K)배, 가운데 (1+K)배
+//
+// 끝(0, 1)과 가운데(0.5)는 그대로 0, 1, 0.5 로 남는다.
+// 특히 가운데가 0.5 에 그대로 있어야 성공선이 왕복의 한가운데 시점과 맞물린다.
+// K 가 1 미만이면 속도가 0 이하로 내려가지 않으므로 칼은 늘 앞으로만 간다.
+function posAt(sec) {
+  const phase = (advAt(sec) / sweep) % 2;          // 0~2 가 한 왕복
+  const tri = phase < 1 ? phase : 2 - phase;
+  return tri - centerK * Math.sin(2 * Math.PI * tri) / (2 * Math.PI);
+}
+
+function drawKnife(p) {
+  knife.style.left = (p * 100) + "%";
+}
+
+function frame(now) {
+  drawKnife(posAt((now - t0) / 1000));
+  raf = requestAnimationFrame(frame);
+}
+
+function reset() {
+  cancelAnimationFrame(raf);
+  state = "ready";
+  ratio.textContent = "";
+  slot.innerHTML = "";
+  knife.classList.remove("stopped");
+  cake.classList.remove("ok", "fail");     // 떡을 온전한 모습으로 되돌린다
+  drawKnife(0);
+  go.textContent = "시 작";
+}
+
+function start() {
+  // 매판 움직임을 새로 뽑는다. 외워서 하는 게 아니라 보고 읽어야 한다.
+  // 흔들림 주기가 편도 시간과 맞물리면 결국 같은 박자가 되어 버리므로
+  // 두 값을 따로 뽑고, 시작 위상까지 흩어 놓는다.
+  sweep   = R.sweepMin  + Math.random() * (R.sweepMax  - R.sweepMin);
+  centerK = R.centerMin + Math.random() * (R.centerMax - R.centerMin);
+  waveA   = R.waveMin   + Math.random() * (R.waveMax   - R.waveMin);
+  waveW   = 2 * Math.PI / (R.wavePMin + Math.random() * (R.wavePMax - R.wavePMin));
+  wavePhi = Math.random() * Math.PI * 2;
+
+  state = "running";
+  ratio.textContent = "";
+  slot.innerHTML = "";
+  knife.classList.remove("stopped");
+  cake.classList.remove("ok", "fail");
+  go.textContent = "자 르 기";
+  t0 = performance.now();
+  raf = requestAnimationFrame(frame);
+}
+
+function cut(at) {
+  cancelAnimationFrame(raf);
+  state = "done";
+
+  const p = posAt((at - t0) / 1000);
+  drawKnife(p);
+  knife.classList.add("stopped");
+
+  const left = p * 100, right = 100 - left;
+  const err = Math.abs(left - 50);
+  const ok = err <= R.tolPct;
+
+  // 성공하면 정확히 반으로 갈리고, 실패하면 자르지 못한 채 떡이 찡그린다.
+  // 빗나간 자리는 매판 다르므로 잘린 그림을 위치별로 둘 수 없다.
+  cake.classList.add(ok ? "ok" : "fail");
+
+  ratio.innerHTML = ok
+    ? "왼쪽 <b>" + left.toFixed(2) + "%</b>"
+      + " &nbsp;·&nbsp; 오른쪽 <b>" + right.toFixed(2) + "%</b>"
+    : "가운데에서 <b>" + err.toFixed(2) + "%</b> 벗어남";
+
+  slot.innerHTML = verdictHtml(ok, "오차 " + err.toFixed(2) + "%", "");
+  go.textContent = "다 시";
+}
+
+function press(ev) {
+  if (state === "ready") start();
+  else if (state === "running") cut(pressTime(ev));
+  else reset();
+}
+
+go.addEventListener("click", press);
+onPressKey(press);
+reset();
+</script>
+</body>
+</html>
