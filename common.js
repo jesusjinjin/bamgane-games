@@ -3,6 +3,14 @@
    ───────────────────────────────────────────────────────────── */
 "use strict";
 
+/* 이 묶음의 버전. 하루 작업을 마무리할 때 0.01 씩 올린다.
+   자세한 내용은 _버전.md 에 적는다.
+
+   배포용은 만들 때 이 파일을 그대로 복사해 가므로, 그때 값이 그대로 박힌다.
+   관리용을 0.02 로 올려도 배포를 안 하면 배포용은 0.01 로 남는다.
+   두 화면을 나란히 띄우면 무엇이 아직 안 나갔는지 눈으로 보인다. */
+const VERSION = "0.01";
+
 /* 난이도. 여기 숫자만 고치면 모든 게임에 반영된다.
    값은 사람의 오차 분포로 시뮬레이션해 성공률 5% 안팎으로 잡은 것이다.
    실제로 해보고 쉽거나 어려우면 이 숫자를 조정한다. */
@@ -13,13 +21,22 @@ const RULES = {
   //   ① 자리에 따라 — 양 끝에서 느리고 가운데(성공선)에서 빠르다. 항상 그렇다.
   //   ② 시간에 따라  — 판 전체 박자가 오르내린다. 박자를 못 세게 하는 몫.
   // ①이 없으면 ②의 느린 구간이 성공선과 겹쳐서 거저 주는 판이 나온다.
-  ricecut:  { tolPct: 0.15,                     // 성공 오차 % (떡 폭 910px 기준 1.37px)
+  // 떡을 세 조각으로 나눈다. 자를 자리 두 곳이 매판 랜덤이고,
+  // 두 번 자른 뒤 오차를 합해서 판정한다.
+  // 한 번 자를 때보다 기준을 넓힌 이유: 두 번 연속이면 성공률이 제곱으로 떨어진다.
+  // 0.15% 를 그대로 두면 백 번에 한 번 되는 게임이 된다.
+  ricecut:  { cuts: 2,                          // 자르는 횟수 (조각은 3개)
+              tolSum: 0.60,                     // 두 오차의 합이 이 % 안이면 성공
+              minGapPct: 20,                    // 조각 하나가 최소 이만큼은 되어야 한다
+              tolPct: 0.15,                     // (옛 단일 컷 기준. 참고용으로 남겨 둠)
               sweepMin: 2.4, sweepMax: 2.9,     // 편도 기준 시간(초)
               centerMin: 0.50, centerMax: 0.65, // 가운데 가속. 끝은 (1-값)배, 가운데는 (1+값)배
               waveMin: 0.15, waveMax: 0.25,     // 시간에 따른 흔들림 폭 (±비율)
               wavePMin: 1.6, wavePMax: 2.8,     // 그 주기(초). 편도와 안 맞물리게 잡는다
               creep: 0.05 },                    // 초당 이만큼씩 빨라진다 (오래 못 끌게)
-  schulte:  { limitSec: 5.0, count: 12 },                   // 제한 시간, 숫자 개수
+  // 6열 3행 18장. 세로는 305px 칸이라 3줄이 한계여서 가로로 늘렸다.
+  // 흔들림은 시간이 갈수록 심해진다 — 남은 시간을 숫자 말고 몸으로 느끼게 하려는 것.
+  schulte:  { limitSec: 7.0, count: 18, wobbleMax: 3.2 },
   wire:     { halfWidth: 3.9 },                             // 통로 반폭(px)
   // 목표 시각은 매판 8~10초 사이에서 0.1초 간격으로 뽑는다. 외워서 못 하게.
   stopwatch:{ minTarget: 8.0, maxTarget: 10.0, targetStep: 0.1, places: 2 },
@@ -143,6 +160,55 @@ addEventListener("DOMContentLoaded", () => {
   });
 });
 
+/* 목록 화면 구석에 버전을 조그맣게 띄운다.
+   관리용과 배포용을 나란히 놓았을 때 어느 쪽이 앞선 것인지 눈으로 가르려는 것이다.
+   빌드 번호(?v=)도 같이 붙인다 — 같은 버전 안에서도 몇 번째 빌드인지 알 수 있고,
+   시청자 브라우저가 옛 파일을 붙잡고 있는지 확인할 때 이 숫자를 보면 된다. */
+addEventListener("DOMContentLoaded", () => {
+  const hub = document.querySelector(".hub");
+  if (!hub || document.getElementById("ver")) return;
+
+  const s = document.querySelector('script[src*="common.js"]');
+  const m = s && s.getAttribute("src").match(/\?v=(\d+)/);
+
+  const d = document.createElement("div");
+  d.id = "ver";
+  d.textContent = "v" + VERSION + (m ? " · " + m[1] : "");
+  hub.appendChild(d);
+});
+
+/* 게임 화면에 들어오면 바로 배경음악을 튼다.
+   예전에는 "도 전" 을 눌러야 나왔는데, 그러면 규칙을 읽는 동안 화면이 조용하다.
+
+   다만 브라우저는 사용자가 이 화면에서 무언가 누르기 전에는 소리를 못 내게 막는다.
+   목록에서 카드를 누른 것은 **앞 화면에서의 일**이라 여기까지 이어지지 않는다.
+   그래서 일단 틀어 보고, 막혔으면 이 화면에서의 첫 움직임에 다시 튼다.
+   손을 대기만 해도 걸리도록 누름·키·마우스 이동을 모두 본다. */
+addEventListener("DOMContentLoaded", () => {
+  if (typeof Sound === "undefined" || !document.querySelector(".topbar")) return;
+
+  let 틀었나 = false;
+  const 틀기 = () => {
+    if (틀었나) return;
+    틀었나 = true;
+    Sound.bgm();
+  };
+
+  틀기();                                   // 되면 바로
+
+  // 막혔을 때를 위한 그물. 한 번 걸리면 스스로 걷힌다.
+  const 그물 = () => {
+    틀었나 = false;                          // 앞의 시도가 막혔을 수 있으니 다시
+    틀기();
+    for (const e of ["pointerdown", "keydown", "pointermove"]) {
+      removeEventListener(e, 그물);
+    }
+  };
+  for (const e of ["pointerdown", "keydown", "pointermove"]) {
+    addEventListener(e, 그물, { once: false });
+  }
+});
+
 /* 시작 버튼 옆에 홈으로 나가는 버튼을 붙인다.
    게임마다 .controls 를 따로 적어 두고 있어서, 파일 12개를 다 고치는 대신
    여기서 한 번에 넣는다. 새 게임을 만들어도 저절로 따라온다. */
@@ -178,13 +244,24 @@ function stageEffect(ok) {
   // 그대로 두면 덮개가 화면에 눌러앉으므로 시간을 재서 반드시 걷어낸다.
   setTimeout(() => fx.remove(), 1200);
 
-  if (ok) return;
-  stage.classList.remove("shake");
+  // 화면을 한 번 때린다. 성공은 부풀고, 실패는 흔들린다.
+  // 둘 다 transform 을 쓰므로 같이 걸면 서로 덮어쓴다. 하나만 건다.
+  const 몸짓 = ok ? "punch" : "shake";
+  stage.classList.remove("punch", "shake");
   void stage.offsetWidth;                 // 애니메이션을 처음부터 다시 틀게 한다
-  stage.classList.add("shake");
-  const clear = () => stage.classList.remove("shake");
+  stage.classList.add(몸짓);
+  const clear = () => stage.classList.remove("punch", "shake");
   stage.addEventListener("animationend", clear, { once: true });
-  setTimeout(clear, 800);
+  setTimeout(clear, 900);
+
+  if (!ok) return;
+
+  // 성공에는 퍼져 나가는 고리를 하나 더 얹는다
+  const ring = document.createElement("div");
+  ring.className = "fx-ring";
+  ring.addEventListener("animationend", () => ring.remove());
+  stage.appendChild(ring);
+  setTimeout(() => ring.remove(), 1200);
 }
 
 /* 판정 화면 */

@@ -6,8 +6,9 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>떡 자르기</title>
-<link rel="stylesheet" href="common.css?v=50">
-<script src="common.js?v=50"></script>
+<link rel="stylesheet" href="common.css?v=69">
+<script src="common.js?v=69"></script>
+<script src="sound.js?v=69"></script>
 <style>
   :root { --accent-1: #ec4899; --accent-2: #e11d48; }
 
@@ -22,33 +23,87 @@
   }
   .body { z-index: 1; }
 
-  /* 판정 → 떡 → 좌우비율 → 버튼. 위에서 아래로 읽히고,
-     누르는 손 바로 위에 떡이 온다. 합이 580 이라 게임 영역 안에 들어간다. */
+  /* 조작 프레임(432) + 안내(30) + 버튼. 판정은 프레임 위에 겹친다.
+     떡은 가로세로 비가 5:1 이라 프레임 세로를 다 못 채운다.
+     남는 위아래로는 부엌 배경이 그대로 비쳐서 오히려 그림이 산다. */
   .board { width: 100%; display: grid; justify-items: center;
-           grid-template-rows: 150px 302px 28px auto; align-content: center; }
-  .slot     { display: grid; place-items: center; order: 1; align-self: end; }
-  .cakeslot { display: grid; place-items: center; order: 2; }
-  .ratio    { order: 3; }
-  .controls { text-align: center; order: 4; }
+           grid-template-rows: var(--play-h) 30px auto; align-content: center;
+           position: relative; }
+  /* 프레임 한가운데에 두면 떠 보인다. 돌탑은 탑이 바닥에서 올라가느라
+     저절로 아래에 놓이는데, 이 게임만 가운데면 게임을 바꿀 때 눈이 위아래로 튄다.
+     프레임 아래쪽에 붙여 돌탑 1층과 비슷한 높이에 오게 한다. */
+  .cakeslot { display: grid; place-items: end center; order: 1;
+              width: var(--play-w); height: var(--play-h); }
+  .ratio    { order: 2; align-self: center; }
+  .controls { text-align: center; order: 3; }
+  .slot { position: absolute; left: 50%; top: calc(var(--play-h) / 2);
+          transform: translate(-50%, -50%); z-index: 4;
+          display: grid; place-items: center; pointer-events: none; }
 
   /* 떡 — 세 상태 그림이 같은 캔버스라 contain 으로 두면 크기가 저절로 맞는다 */
   .cake {
-    position: relative; width: 910px; height: 183px;
+    position: relative; width: 768px; height: 154px;
     background: url('assets/ricecut/cake-idle.webp') center / contain no-repeat;
     filter: drop-shadow(0 10px 16px rgba(40, 30, 20, .40));
   }
-  .cake.ok   { background-image: url('assets/ricecut/cake-ok.webp'); }
-  .cake.fail { background-image: url('assets/ricecut/cake-fail.webp'); }
+  /* 다 자르고 나면 온전한 그림을 숨기고 조각들로 바꿔 끼운다 */
+  .cake.cut { background-image: none; }
 
-  /* 정답 위치 */
-  .cake .center { position: absolute; left: 50%; top: -8px; bottom: -8px;
-                  width: 2px; background: rgba(255,255,255,.26);
-                  transform: translateX(-50%); }
+  /* 잘린 조각. 자를 자리가 매판 다르므로 조각 그림을 미리 만들어 둘 수 없다.
+     그래서 같은 그림 한 장을 조각마다 깔고 배경을 옆으로 밀어
+     자기 몫만 보이게 한다. 폭과 미는 양은 코드가 넣는다. */
+  .cake .piece {
+    position: absolute; top: 0; height: 100%;
+    background-image: var(--face, url('assets/ricecut/cake-idle.webp'));
+    background-repeat: no-repeat;
+    background-size: 768px auto;
+    transform: translateX(var(--sh, 0));
+    transition: transform .34s cubic-bezier(.2,.8,.3,1);
+  }
+  /* 잘린 단면. 가래떡 속살은 하얗고 매끈해서 옅은 띠 하나면 단면으로 읽힌다. */
+  .cake .piece::before,
+  .cake .piece::after { content: none; position: absolute; top: 9%; bottom: 9%; width: 6px; }
+  .cake .piece.cl::before {
+    content: ""; left: 0;
+    background: linear-gradient(90deg, rgba(255,252,244,.96), rgba(255,252,244,0));
+    border-radius: 50% 0 0 50% / 50% 0 0 50%;
+  }
+  .cake .piece.cr::after {
+    content: ""; right: 0;
+    background: linear-gradient(90deg, rgba(255,252,244,0), rgba(255,252,244,.96));
+    border-radius: 0 50% 50% 0 / 0 50% 50% 0;
+  }
+
+  /* 칼이 닿는 순간 떡이 움찔한다. 그림만 바뀌면 맞은 느낌이 없다.
+     아래로 눌렸다가 튀어오르는 한 박자. */
+  .cake.shock { animation: cake-shock .34s cubic-bezier(.2,.8,.3,1); }
+  @keyframes cake-shock {
+    0%   { transform: scaleY(1)    translateY(0); }
+    14%  { transform: scaleY(.90)  translateY(5px); }
+    38%  { transform: scaleY(1.05) translateY(-3px); }
+    64%  { transform: scaleY(.98)  translateY(1px); }
+    100% { transform: scaleY(1)    translateY(0); }
+  }
+
+  /* 자를 자리. 두 곳이 보이되 지금 잘라야 할 쪽만 밝다.
+     둘 다 밝으면 어디를 노려야 하는지 알 수 없다. */
+  .cake .guide {
+    position: absolute; top: -8px; bottom: -8px; width: 2px;
+    background: rgba(255, 255, 255, .24);
+    transform: translateX(-50%);
+    transition: background .18s, box-shadow .18s, width .18s;
+  }
+  .cake .guide.on {
+    width: 3px; background: rgba(255, 255, 255, .96);
+    box-shadow: 0 0 12px rgba(255, 255, 255, .85);
+  }
+  /* 이미 자른 자리 — 흔적만 남긴다 */
+  .cake .guide.done { background: rgba(255, 220, 170, .55); box-shadow: none; width: 2px; }
 
   /* 칼 — left 는 왼쪽 모서리 기준이라 폭이 넓어지면 날 선이 그만큼 밀린다.
      가운데로 당겨야 화면에 보이는 자리와 실제 판정 자리가 맞는다. */
   .knife {
-    position: absolute; top: -114px; bottom: 124px; width: 60px;
+    position: absolute; top: -96px; bottom: 105px; width: 51px;
     background: url('assets/ricecut/knife.webp') center / contain no-repeat;
     transform: translateX(-50%);
     filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .5));
@@ -82,9 +137,11 @@
   <div class="body">
     <div class="play">
       <div class="board">
-        <div class="cakeslot">
+        <div class="cakeslot playslot">
           <div class="cake" id="cake">
-            <div class="center"></div>
+            <div class="pieces" id="pieces"></div>
+            <div class="guide" id="g0"></div>
+            <div class="guide" id="g1"></div>
             <div class="knife" id="knife" style="left:0"></div>
           </div>
         </div>
@@ -101,11 +158,12 @@
       <h2>규칙</h2>
       <ul>
         <li>칼이 좌우로 왕복합니다</li>
-        <li>떡의 정확히 가운데서 자르세요</li>
+        <li>밝은 선에 맞춰 두 번 자르세요</li>
         <li>가운데를 지날 때 가장 빠릅니다</li>
         <li>끌수록 점점 빨라집니다</li>
+        <li>자를 자리는 매판 달라집니다</li>
         <li>기회는 한 번뿐입니다</li>
-        <li><b>[성공기준]</b> 오차 0.15% 이내</li>
+        <li><b>[성공기준]</b> 두 오차의 합 0.60% 이내</li>
       </ul>
     </aside>
   </div>
@@ -116,7 +174,18 @@
 "use strict";
 
 const R = RULES.ricecut;
-const cake  = document.getElementById("cake");
+
+// 녹음된 소리를 등록한다. 오기 전에는 코드로 만든 소리가 대신 난다.
+Sound.use({
+  slice:       "assets/_sounds/ricecut/cut.mp3",     // 떡을 가르는 순간
+  swoosh:      "assets/_sounds/ricecut/swoosh.mp3",  // 칼이 지나가는 바람
+  thud:        "assets/_sounds/ricecut/miss.mp3",    // 도마를 치는 둔탁한 소리
+  success:     "assets/_sounds/common/success.mp3",
+  fail:        "assets/_sounds/common/fail.mp3",
+});
+const cake   = document.getElementById("cake");
+const pieces = document.getElementById("pieces");
+const guides = [document.getElementById("g0"), document.getElementById("g1")];
 const knife = document.getElementById("knife");
 const ratio = document.getElementById("ratio");
 const slot = document.getElementById("slot");   // 판정이 들어갈 자리
@@ -124,6 +193,10 @@ const go   = document.getElementById("go");     // 버튼은 하나뿐. 글자�
 
 let state = "ready";      // ready | running | done
 let raf = 0, t0 = 0;
+let 자를자리 = [];        // 이번 판에 잘라야 할 두 곳 (0~1)
+let 차례 = [];            // 어느 쪽부터 자를지. 매판 랜덤
+let 몇번째 = 0;           // 지금 몇 번째 컷인가
+let 오차들 = [];          // 컷마다의 오차(%)
 let sweep = 2.6;          // 이번 판의 편도 기준 시간(초)
 let centerK = 0.58;       // 가운데 가속. 끝 (1-K)배, 가운데 (1+K)배
 let waveA = 0.2;          // 시간에 따라 빨라졌다 느려지는 폭
@@ -167,23 +240,74 @@ function drawKnife(p) {
   knife.style.left = (p * 100) + "%";
 }
 
+// 칼이 지나갈 때마다 바람 소리를 낸다.
+// 왕복 한 번에 한 번씩만 — 매 프레임 울리면 소리가 뭉개진다.
+// 가운데를 지나는 순간에 맞춰 울려야 눈으로 보는 것과 귀로 듣는 것이 맞물린다.
+let 지난쪽 = 0;
+
 function frame(now) {
-  drawKnife(posAt((now - t0) / 1000));
+  const sec = (now - t0) / 1000;
+  const p = posAt(sec);
+  drawKnife(p);
+
+  // 가운데(0.5)를 막 넘었는가
+  const 쪽 = p < 0.5 ? -1 : 1;
+  if (지난쪽 !== 0 && 쪽 !== 지난쪽) {
+    // 그 순간의 속도를 소리 세기로 넘긴다. 빠를수록 날카롭게 지나간다.
+    const v = Math.abs(posAt(sec + 0.008) - posAt(sec - 0.008)) / 0.016;
+    Sound.swoosh(Math.min(1, v / 1.1));
+  }
+  지난쪽 = 쪽;
+
+  // 칼은 끌수록 빨라진다. 그 위험을 소리로도 깔아 준다.
+  // 8초쯤이면 꽤 빨라져 있으므로 그때를 최대로 잡았다.
+  Sound.tensionSet(sec / 8);
+
   raf = requestAnimationFrame(frame);
 }
 
 // 자르기 전에 띄워 두는 한 줄. 자르고 나면 좌우 비율이 이 자리를 대신한다.
 // 칼이 지금 어디쯤인지는 절대 숫자로 보여주지 않는다. 그러면 눈이 아니라
 // 숫자를 보고 누르게 되어 게임이 아니게 된다.
-const GUIDE = "떡을 정확히 <b>반</b>으로 자르면 성공";
+const GUIDE = "밝은 선에 맞춰 <b>두 번</b> 자르세요";
+
+// 자를 자리를 매판 새로 뽑는다.
+// 조각 셋이 저마다 최소 minGapPct 는 되도록 잡는다 —
+// 안 그러면 종잇장처럼 얇은 조각이 나와서 자를 자리가 사실상 정해져 버린다.
+function 자리뽑기() {
+  const g = R.minGapPct / 100;
+  const a = g + Math.random() * (1 - 3 * g);        // 첫 선
+  const b = a + g + Math.random() * (1 - g - a - g); // 둘째 선
+  return [a, b];
+}
+
+function 선그리기() {
+  for (let i = 0; i < 2; i++) {
+    guides[i].style.left = (자를자리[i] * 100) + "%";
+    guides[i].className = "guide";
+  }
+}
+
+// 지금 잘라야 할 선만 밝힌다
+function 지금선() {
+  if (몇번째 >= 차례.length) return;
+  guides[차례[몇번째]].classList.add("on");
+}
 
 function reset() {
   cancelAnimationFrame(raf);
+  Sound.tensionStop();
   state = "ready";
   ratio.innerHTML = GUIDE;
   slot.innerHTML = "";
   knife.classList.remove("stopped");
-  cake.classList.remove("ok", "fail");     // 떡을 온전한 모습으로 되돌린다
+  cake.classList.remove("ok", "fail", "shock", "cut");
+  cake.style.removeProperty("--face");
+  pieces.innerHTML = "";
+  자를자리 = 자리뽑기();
+  차례 = Math.random() < 0.5 ? [0, 1] : [1, 0];
+  몇번째 = 0; 오차들 = [];
+  선그리기();
   drawKnife(0);
   go.textContent = "도 전";
 }
@@ -199,38 +323,100 @@ function start() {
   wavePhi = Math.random() * Math.PI * 2;
 
   state = "running";
-  ratio.innerHTML = GUIDE;               // 자르는 동안에도 그대로 둔다
   slot.innerHTML = "";
   knife.classList.remove("stopped");
-  cake.classList.remove("ok", "fail");
+  cake.classList.remove("ok", "fail", "shock", "cut");
+  cake.style.removeProperty("--face");
+  pieces.innerHTML = "";
+  자를자리 = 자리뽑기();
+  차례 = Math.random() < 0.5 ? [0, 1] : [1, 0];
+  몇번째 = 0; 오차들 = [];
+  선그리기(); 지금선();
+  진행표시();
   go.textContent = "자 르 기";
+  지난쪽 = 0;
+  Sound.tensionStart();                  // 끌수록 조여든다
   t0 = performance.now();
   raf = requestAnimationFrame(frame);
 }
 
-function cut(at) {
-  cancelAnimationFrame(raf);
-  state = "done";
+// 지금 몇 번째를 자르는 중인지, 오차가 얼마나 쌓였는지 보여준다
+function 진행표시() {
+  const 쌓임 = 오차들.reduce((a, b) => a + b, 0);
+  ratio.innerHTML = "<b>" + (몇번째 + 1) + "</b> / " + R.cuts + " 번째"
+    + (오차들.length
+        ? " &nbsp;·&nbsp; 오차 <b>" + 쌓임.toFixed(2) + "</b>% / " + R.tolSum.toFixed(2) + "%"
+        : " &nbsp;·&nbsp; 밝은 선에 맞추세요");
+}
 
+// 다 자른 뒤 떡을 세 조각으로 갈라 놓는다.
+// 자를 자리가 매판 다르므로 조각 그림을 미리 만들 수 없다.
+// 같은 그림을 조각마다 깔고 배경을 옆으로 밀어 자기 몫만 보이게 한다.
+// 다 자른 뒤 조각들의 표정.
+// cake-ok 은 이미 가운데가 갈려 있어 세 조각으로 나누면 엉뚱한 자국이 남는다.
+// 그래서 그 틈을 떡 몸통으로 메운 통짜 웃는 그림(cake-happy)을 따로 만들어 쓴다.
+const 표정 = {
+  ok:   "url('assets/ricecut/cake-happy.webp')",
+  fail: "url('assets/ricecut/cake-fail.webp')",
+};
+
+function 조각내기(자른곳, ok) {
+  const W = cake.clientWidth;
+  const 경계 = [0, ...[...자른곳].sort((a, b) => a - b).map((v) => v * W), W];
+  cake.classList.add("cut");
+  cake.style.setProperty("--face", ok ? 표정.ok : 표정.fail);
+  pieces.innerHTML = "";
+  for (let i = 0; i < 3; i++) {
+    const l = 경계[i], r = 경계[i + 1];
+    const d = document.createElement("div");
+    d.className = "piece" + (i > 0 ? " cl" : "") + (i < 2 ? " cr" : "");
+    d.style.left = l + "px";
+    d.style.width = (r - l) + "px";
+    d.style.backgroundPosition = (-l) + "px center";
+    pieces.appendChild(d);
+    // 한 박자 뒤에 좌우로 벌어진다. 바로 벌리면 잘린 게 안 보인다.
+    setTimeout(() => d.style.setProperty("--sh", ((i - 1) * 9) + "px"), 60);
+  }
+}
+
+function cut(at) {
   const p = posAt((at - t0) / 1000);
+  const 노린곳 = 자를자리[차례[몇번째]];
+  const err = Math.abs(p - 노린곳) * 100;      // % 단위
+  오차들.push(err);
+
   drawKnife(p);
+  Sound.slice();
+  Sound.thud(err < 0.3 ? 0.85 : 0.45);
+  cake.classList.remove("shock");
+  void cake.offsetWidth;
+  cake.classList.add("shock");
+
+  // 방금 자른 선은 흔적만 남기고, 다음 선을 밝힌다
+  guides[차례[몇번째]].className = "guide done";
+  몇번째++;
+
+  if (몇번째 < R.cuts) {                        // 아직 남았다
+    지금선();
+    진행표시();
+    return;                                     // 칼은 계속 왕복한다
+  }
+
+  // 다 잘랐다
+  cancelAnimationFrame(raf);
+  Sound.tensionStop();
+  state = "done";
   knife.classList.add("stopped");
 
-  const left = p * 100, right = 100 - left;
-  const err = Math.abs(left - 50);
-  const ok = err <= R.tolPct;
+  const 합 = 오차들.reduce((a, b) => a + b, 0);
+  const ok = 합 <= R.tolSum;
+  조각내기(자를자리, ok);
 
-  // 성공하면 정확히 반으로 갈리고, 실패하면 자르지 못한 채 떡이 찡그린다.
-  // 빗나간 자리는 매판 다르므로 잘린 그림을 위치별로 둘 수 없다.
-  cake.classList.add(ok ? "ok" : "fail");
-
-  ratio.innerHTML = ok
-    ? "왼쪽 <b>" + left.toFixed(2) + "%</b>"
-      + " &nbsp;·&nbsp; 오른쪽 <b>" + right.toFixed(2) + "%</b>"
-    : "가운데에서 <b>" + err.toFixed(2) + "%</b> 벗어남";
-
-  slot.innerHTML = verdictHtml(ok, "오차 " + err.toFixed(2) + "%", "");
+  ratio.innerHTML = "오차 " + 오차들.map((e) => e.toFixed(2)).join("% + ")
+                  + "% = <b>" + 합.toFixed(2) + "</b>%";
+  slot.innerHTML = verdictHtml(ok, "오차 " + 합.toFixed(2) + "%", "");
   go.textContent = "다 시";
+  setTimeout(() => { if (ok) Sound.success(); else Sound.fail(); }, 130);
 }
 
 function press(ev) {
