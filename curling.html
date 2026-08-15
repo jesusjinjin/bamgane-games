@@ -6,9 +6,9 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>조약돌 밀기</title>
-<link rel="stylesheet" href="common.css?v=75">
-<script src="common.js?v=75"></script>
-<script src="sound.js?v=75"></script>
+<link rel="stylesheet" href="common.css?v=81">
+<script src="common.js?v=81"></script>
+<script src="sound.js?v=81"></script>
 <style>
   :root { --accent-1: #f59e0b; --accent-2: #ea580c; }
 
@@ -116,7 +116,11 @@ const CY = H / 2;
 const SCALE = 768 / 900;         // 0.8533
 const START_X = 80 * SCALE;      // 돌이 출발하는 자리
 const STONE_R = 15 * SCALE;      // 판정은 중심 좌표로 한다. 이 값은 보기용 크기다.
-const MAX_PULL = 150 * SCALE;    // 최대로 당길 수 있는 거리
+// 최대로 당길 수 있는 거리. 예전 150 에서 20% 늘렸다.
+// 벽에 튕겨 보내면 지나는 길이 훨씬 길어지는데 최대 세기로도 모자랐다.
+// 늘린 것은 당기는 구간뿐이고 POWER 는 손대지 않았다. 그래야
+// 지금까지와 같은 만큼 당겼을 때 세기가 그대로다 — 손에 익은 감각을 지킨다.
+const MAX_PULL = 180 * SCALE;
 const TARGET_R = R.targetR * SCALE;   // 성공 반지름 10 → 8.5
 
 // 돌이 노는 구간의 높이. 캔버스는 프레임에 맞춰 432 로 키웠지만
@@ -199,6 +203,37 @@ function drawEdge(y) {
   }
 }
 
+// 돌이 나갈 쪽으로 깔리는 옅은 노란 길.
+// 길이는 고정이고 끝은 투명하게 흩어진다. 당긴 만큼 길어지게 하면
+// 세기까지 눈으로 읽혀서 손 감각으로 가늠하는 재미가 사라진다.
+// 끝을 흐려 두면 "어디까지 간다" 가 아니라 "이쪽으로 간다" 로만 읽힌다.
+const AIM_LEN = 150 * SCALE;      // 길의 길이 (당긴 세기와 무관)
+const AIM_W   = 40 * SCALE;       // 돌 몸통만 한 폭
+
+function 길그리기() {
+  const len = Math.hypot(pull.x, pull.y);
+  if (len < 8 * SCALE) return;          // 놓아도 안 나가는 세기 — 아직 방향이랄 게 없다
+
+  ctx.save();
+  ctx.translate(stone.x, stone.y);
+  ctx.rotate(Math.atan2(pull.y, pull.x));
+
+  const s = STONE_R * 0.3;              // 돌 밑에서 시작해 깔려 나간다
+  const 깔기 = (폭, 진하기) => {
+    const g = ctx.createLinearGradient(s, 0, s + AIM_LEN, 0);
+    g.addColorStop(0,    "rgba(255, 212, 84, " + 진하기 + ")");
+    g.addColorStop(0.45, "rgba(255, 212, 84, " + (진하기 * 0.55).toFixed(3) + ")");
+    g.addColorStop(1,    "rgba(255, 212, 84, 0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(s, -폭 / 2, AIM_LEN, 폭);
+  };
+
+  깔기(AIM_W, 0.30);                    // 길 전체
+  깔기(AIM_W * 0.3, 0.34);              // 한가운데만 조금 더 — 눈 위에서도 선이 잡힌다
+
+  ctx.restore();
+}
+
 function drawStone() {
   // 당기는 동안 돌이 조금만 뒤로 물러난다.
   // 눌리고 있다는 것만 알려줄 뿐, 세기를 재기에는 턱없이 작다.
@@ -243,8 +278,8 @@ function draw() {
   // 시작하는 순간 나타나야 "이번 판은 여기구나" 가 눈에 들어온다.
   if (state !== "ready") drawTarget();
 
-  // 조준선은 그리지 않는다. 방향과 세기를 눈으로 읽을 수 있으면 너무 쉬워진다.
-  // 손이 얼마나 움직였는지만으로 가늠해야 한다.
+  // 당기는 동안만 갈 길을 깔아 준다. 세기는 여전히 손 감각으로 가늠한다.
+  if (state === "aiming" && pulling) 길그리기();
   drawStone();
 }
 
@@ -299,8 +334,6 @@ function slide(now) {
   // 미끄러지는 소리를 속도에 맞춰 계속 울린다.
   // 처음 민 세기가 대략 11 정도라 그 값으로 나눠 0~1 로 바꾼다.
   Sound.slideSet(Math.min(1, speed / (11 * SCALE)));
-  // 느려질수록 조여든다. 결과가 드러나기 직전이 가장 팽팽하다.
-  Sound.tensionSet(1 - Math.min(1, speed / (11 * SCALE)));
   status.innerHTML = "굴러가는 중 &nbsp;·&nbsp; <b>"
                    + distToTarget().toFixed(1) + "</b>px";
 
@@ -319,10 +352,12 @@ function judge(out) {
   state = "done";
   cv.classList.add("idle");
 
+  // 멈추면 미끄러지는 소리만 끊는다.
+  // 예전에는 여기서 한 번 더 울렸다(자리 잡는 소리 + 느려질수록 조여드는 낮은 음).
+  // 떡·돌탑은 내가 누른 순간 나는 소리라 반응으로 들리지만,
+  // 조약돌은 손을 뗀 지 한참 뒤라 내 조작과 이어지지 않는다.
+  // 판정음 직전에 낮게 울리기까지 해서 판정음이 두 번 나는 것처럼 들렸다.
   Sound.slideStop();
-  Sound.tensionStop();
-  // 돌이 얼음 위에 자리를 잡는 소리. 판정보다 먼저 온다.
-  Sound.thud(0.5);
 
   status.innerHTML = out
     ? "과녁을 지나쳐 나갔습니다"
@@ -373,7 +408,6 @@ cv.addEventListener("pointerup", () => {
   Sound.thud(0.3 + Math.min(0.6, power / MAX_PULL * 0.6));
   Sound.crackle(1.6);
   Sound.slideStart();             // 여기서부터 멈출 때까지 계속 미끄러지는 소리
-  Sound.tensionStart();           // 느려질수록 조여든다
   튕김 = false;
   lastT = 0; carry = 0;           // 시간 누적을 새로 시작한다
   anim = requestAnimationFrame(slide);
@@ -381,7 +415,7 @@ cv.addEventListener("pointerup", () => {
 
 function reset() {
   cancelAnimationFrame(anim); anim = 0;
-  Sound.slideStop(); Sound.tensionStop();
+  Sound.slideStop();
   state = "ready";
   newRound();
   slot.innerHTML = "";
@@ -406,7 +440,7 @@ function press() {
   if (state === "ready") start();
   else if (state === "aiming" || state === "sliding") {
     cancelAnimationFrame(anim); anim = 0;
-    Sound.slideStop(); Sound.tensionStop();   // 포기해도 소리는 끊어야 한다
+    Sound.slideStop();                        // 포기해도 소리는 끊어야 한다
     state = "done"; pulling = false;
     cv.classList.add("idle");
     slot.innerHTML = verdictHtml(false, "포기", "");

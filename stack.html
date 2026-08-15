@@ -6,9 +6,9 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>돌탑 쌓기</title>
-<link rel="stylesheet" href="common.css?v=75">
-<script src="common.js?v=75"></script>
-<script src="sound.js?v=75"></script>
+<link rel="stylesheet" href="common.css?v=81">
+<script src="common.js?v=81"></script>
+<script src="sound.js?v=81"></script>
 <style>
   :root { --accent-1: #0ea5e9; --accent-2: #4f46e5; }
 
@@ -123,7 +123,7 @@ const W = cv.width, H = cv.height;
 // 캔버스를 620 → 768 로 키우면서 안의 모든 값을 같은 수로 곱했다.
 // 비율이 하나도 안 바뀌므로 실력 기준은 그대로다.
 const SCALE = 768 / 620;         // 1.2387
-const BAR_W = R.barW * SCALE;    // 첫 돌 너비 54 → 66.9
+const BAR_W = R.barW * SCALE;    // 첫 돌 너비 56 → 69.4 (화면에 보이는 값)
 const BH = 20 * SCALE;           // 한 층 높이 24.8
 const BASE_Y = H - 24 * SCALE;   // 바닥
 const VIEW_ROWS = 15;            // 화면에 보이는 층 수 (넘으면 아래로 내려간다)
@@ -191,7 +191,6 @@ let camera = 0;                  // 탑이 높아지면 화면을 내린다
 
 function reset() {
   cancelAnimationFrame(raf);
-  Sound.tensionStop();
   state = "ready";
   camera = 0;
   tower = [{ x: (W - BAR_W) / 2, w: BAR_W, 색: 벽돌색() }];   // 맨 아래 한 층은 주어진다
@@ -231,8 +230,8 @@ function start() {
   spawn();
   slot.innerHTML = "";
   showFloor();
-  Sound.tensionStart();            // 층이 오를수록 조여든다
-  Sound.tensionSet(tower.length / R.layers);
+  // 예전에는 여기서 낮은 음을 깔고 층이 오를수록 조여들게 했다.
+  // 뱃고동처럼 울려서 돌 얹히는 소리를 덮었다. 떡·조약돌과 함께 뺐다.
   go.textContent = "내려놓기";
   lastFrame = 0;
   raf = requestAnimationFrame(loop);
@@ -243,6 +242,18 @@ function start() {
 const SPEED_BASE = 130 * SCALE;  // 첫 층 속도 (px/초)
 const SPEED_STEP = 13 * SCALE;   // 한 층 오를 때마다 더해지는 속도
 
+/* 막바지 두 층만 따로 더 빠르게 한다.
+
+   층마다 조금씩 빨라지기는 하는데, 그 정도로는 끝이 밋밋했다.
+   14층까지 왔으면 마지막 몇 번은 손이 떨려야 완주가 값어치를 한다. */
+const 막바지층 = [12, 13, 14];
+const 막바지배수 = 1.2;
+
+function 층속도(놓을층) {
+  const 기본 = SPEED_BASE + (놓을층 - 1) * SPEED_STEP;
+  return 막바지층.indexOf(놓을층) >= 0 ? 기본 * 막바지배수 : 기본;
+}
+
 // 새 막대를 만든다. 위로 갈수록 조금씩 빨라진다.
 function spawn() {
   const top = tower[tower.length - 1];
@@ -250,7 +261,7 @@ function spawn() {
     x: Math.random() < 0.5 ? 0 : W - top.w,
     w: top.w,
     dir: 0,
-    speed: SPEED_BASE + tower.length * SPEED_STEP,
+    speed: 층속도(tower.length + 1),   // 지금 놓으려는 것이 몇 층이 될지
     색: 벽돌색(),                     // 이 돌이 가질 색. 얹히면 그대로 남는다
   };
   cur.dir = cur.x === 0 ? 1 : -1;
@@ -295,9 +306,6 @@ function drop() {
   // 얹힐 때마다 화면이 울린다. 세기는 얼마나 잘 놓았는지에 따라 다르다.
   화면울림(정확도);
 
-  // 목표에 가까워질수록 낮은 음이 조여든다. 13층에서 손이 떨리게 하려는 것.
-  Sound.tensionSet(tower.length / R.layers);
-
   showFloor();
 
   // 화면 밖으로 나가지 않게 시야를 올린다
@@ -310,7 +318,6 @@ function drop() {
 
 function finish(ok, why) {
   cancelAnimationFrame(raf);
-  Sound.tensionStop();
   state = "done";
   cur = null;
   const built = tower.length;

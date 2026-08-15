@@ -26,7 +26,7 @@ const RULES = {
   // 한 번 자를 때보다 기준을 넓힌 이유: 두 번 연속이면 성공률이 제곱으로 떨어진다.
   // 0.15% 를 그대로 두면 백 번에 한 번 되는 게임이 된다.
   ricecut:  { cuts: 2,                          // 자르는 횟수 (조각은 3개)
-              tolSum: 1.00,                     // 두 오차의 합이 이 % 안이면 성공
+              tolSum: 2.50,                     // 두 오차의 합이 이 % 안이면 성공
               minGapPct: 20,                    // 조각 하나가 최소 이만큼은 되어야 한다
               tolPct: 0.15,                     // (옛 단일 컷 기준. 참고용으로 남겨 둠)
               sweepMin: 2.4, sweepMax: 2.9,     // 편도 기준 시간(초)
@@ -41,7 +41,7 @@ const RULES = {
   // 목표 시각은 매판 8~10초 사이에서 0.1초 간격으로 뽑는다. 외워서 못 하게.
   stopwatch:{ minTarget: 8.0, maxTarget: 10.0, targetStep: 0.1, places: 2 },
   curling:  { targetR: 10 },                                 // 목표 반지름(px)
-  stack:    { layers: 14, barW: 54 },                       // 층수, 막대 너비
+  stack:    { layers: 14, barW: 56 },                       // 층수, 첫 돌 너비 (54 → 70 에서 20% 줄임)
   // 회차마다 제한이 짧아진다. 소수점 둘째 자리에서 딱 떨어지는 값만 쓴다.
   // 어중간한 값이면 화면 표시(반올림)와 실제 판정이 어긋난다.
   signal:   { limitsSec: [0.40, 0.34, 0.30, 0.27, 0.24] },
@@ -127,8 +127,51 @@ function pressTime(ev) {
     ? ev.timeStamp : performance.now();
 }
 
-/* 소리 끄기 버튼을 상단 바 오른쪽 끝에 붙인다.
-   Sound 가 있는 게임에서만 나타난다. 설정은 다음에 켤 때도 유지된다. */
+/* ── 소리 조절 ──────────────────────────────────────────────────
+   상단 바 오른쪽 끝의 스피커를 누르면 손잡이 두 개가 펼쳐진다.
+   효과음과 배경음악을 따로 조절한다 — 방송에서는 배경음악만 낮추고
+   효과음은 살려 두는 일이 잦은데, 하나로 묶어 두면 그걸 못 한다.
+
+   값은 브라우저에 적어 두므로 다른 게임으로 옮겨 가도 그대로 따라간다.
+   게임마다 다시 맞추게 하면 열두 번 맞춰야 한다. */
+const 소리설정 = (() => {
+  const 열쇠 = { sfx: "bg_vol_sfx", bgm: "bg_vol_bgm" };
+  const 값 = { sfx: 1, bgm: 1 };
+
+  // 예전에는 켜고 끄는 것뿐이었다. 꺼 두고 갔던 사람은 꺼진 채로 이어받는다.
+  let 예전음소거 = false;
+  try { 예전음소거 = localStorage.getItem("bg_mute") === "1"; } catch (_) {}
+
+  for (const k in 열쇠) {
+    let v = null;
+    try { v = localStorage.getItem(열쇠[k]); } catch (_) {}
+    if (v == null) 값[k] = 예전음소거 ? 0 : 1;
+    else 값[k] = Math.max(0, Math.min(1, parseFloat(v) || 0));
+  }
+
+  const 읽기 = (k) => 값[k];
+  const 쓰기 = (k, v) => {
+    값[k] = Math.max(0, Math.min(1, v));
+    try { localStorage.setItem(열쇠[k], String(값[k])); } catch (_) {}
+    if (typeof Sound !== "undefined") Sound.setVolume(k, 값[k]);
+  };
+  return { 읽기, 쓰기 };
+})();
+
+/* 저장해 둔 값을 Sound 에 넣는다.
+
+   여기서 바로 넣으면 안 된다. 게임 화면은 common.js 를 sound.js 보다
+   **먼저** 불러오므로 이 줄이 도는 시점에 Sound 가 아직 없다.
+   그러면 화면의 손잡이만 저장값을 보여 주고 실제 소리는 100% 로 난다.
+
+   그리고 이 줄은 배경음악을 트는 대목(아래)보다 먼저 등록해야 한다.
+   순서가 뒤집히면 0% 로 꺼 둔 사람에게도 곡을 한 번 받아 온다. */
+addEventListener("DOMContentLoaded", () => {
+  if (typeof Sound === "undefined") return;
+  Sound.setVolume("sfx", 소리설정.읽기("sfx"));
+  Sound.setVolume("bgm", 소리설정.읽기("bgm"));
+});
+
 addEventListener("DOMContentLoaded", () => {
   const bar = document.querySelector(".topbar");
   if (!bar || typeof Sound === "undefined") return;
@@ -138,26 +181,58 @@ addEventListener("DOMContentLoaded", () => {
   const OFF = '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/>'
             + '<path d="M17 9.5l4 5M21 9.5l-4 5"/></svg>';
 
+  const 통 = document.createElement("div");
+  통.className = "sndbox";
   const btn = document.createElement("button");
   btn.className = "mute";
-  bar.appendChild(btn);
+  통.appendChild(btn);
 
-  let off = false;
-  try { off = localStorage.getItem("bg_mute") === "1"; } catch (_) {}
+  const 판 = document.createElement("div");
+  판.className = "sndpanel";
+  통.appendChild(판);
+  bar.appendChild(통);
 
-  const apply = () => {
-    Sound.setMuted(off);
-    btn.innerHTML = off ? OFF : ON;
-    btn.classList.toggle("off", off);
-    btn.title = off ? "소리 켜기" : "소리 끄기";
-  };
-  apply();
+  const 손잡이 = {};
+  for (const [갈래, 이름] of [["sfx", "효과음"], ["bgm", "배경음악"]]) {
+    const 줄 = document.createElement("label");
+    줄.className = "sndrow";
+    줄.innerHTML = '<span class="nm">' + 이름 + '</span><span class="pc"></span>';
+    const s = document.createElement("input");
+    s.type = "range"; s.min = "0"; s.max = "100"; s.step = "5";
+    s.value = String(Math.round(소리설정.읽기(갈래) * 100));
+    줄.appendChild(s);
+    판.appendChild(줄);
+    손잡이[갈래] = { s, pc: 줄.querySelector(".pc") };
 
-  btn.addEventListener("click", () => {
-    off = !off;
-    try { localStorage.setItem("bg_mute", off ? "1" : "0"); } catch (_) {}
-    apply();
+    s.addEventListener("input", () => {
+      const v = parseInt(s.value, 10) / 100;
+      소리설정.쓰기(갈래, v);
+      그리기();
+      // 배경음악은 0 이면 아예 안 받아 둔다. 올리는 순간 그때 받아 튼다.
+      if (갈래 === "bgm" && v > 0 && !Sound.isLooping("bgm")) Sound.bgm();
+    });
+  }
+
+  function 그리기() {
+    for (const k in 손잡이) {
+      const v = 소리설정.읽기(k);
+      손잡이[k].pc.textContent = Math.round(v * 100) + "%";
+      손잡이[k].s.classList.toggle("zero", v <= 0);
+    }
+    const 다꺼짐 = 소리설정.읽기("sfx") <= 0 && 소리설정.읽기("bgm") <= 0;
+    btn.innerHTML = 다꺼짐 ? OFF : ON;
+    btn.classList.toggle("off", 다꺼짐);
+    btn.title = "소리 조절";
+  }
+  그리기();
+
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    통.classList.toggle("open");
   });
+  // 판 안을 만질 때는 닫히면 안 된다. 손잡이를 끌다 보면 손이 판 밖으로 나간다.
+  판.addEventListener("pointerdown", (e) => e.stopPropagation());
+  addEventListener("pointerdown", () => 통.classList.remove("open"));
 });
 
 /* 목록 화면 구석에 버전을 조그맣게 띄운다.

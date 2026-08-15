@@ -11,6 +11,19 @@ const Sound = (() => {
   let master = null;
   let muted = false;
 
+  /* 소리를 두 갈래로 나눠 내보낸다.
+
+       효과음 ─┐
+                ├─ master ─→ 스피커
+       배경음악 ─┘
+
+     master 는 전체 크기와 더킹(때리는 순간 잠깐 눌러 주는 것)을 맡고,
+     갈래마다 붙은 손잡이로 효과음과 배경음악을 따로 조절한다.
+     한 덩어리로 두면 "배경음악만 줄이기" 를 할 수 없다. */
+  let sfx = null;          // 효과음 갈래
+  let bgmBus = null;       // 배경음악 갈래
+  const 볼륨 = { sfx: 1, bgm: 1 };   // 0~1. 화면의 손잡이 값이 여기 들어온다
+
   function ctx() {
     if (!ac) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -19,10 +32,30 @@ const Sound = (() => {
       master = ac.createGain();
       master.gain.value = 0.55;
       master.connect(ac.destination);
+
+      sfx = ac.createGain();
+      bgmBus = ac.createGain();
+      // 소리가 처음 나기 전에 손잡이를 돌려 뒀을 수 있다. 그 값으로 시작한다.
+      sfx.gain.value = 볼륨.sfx;
+      bgmBus.gain.value = 볼륨.bgm;
+      sfx.connect(master);
+      bgmBus.connect(master);
     }
     if (ac.state === "suspended") ac.resume();
     return ac;
   }
+
+  /* 갈래 하나의 크기를 바꾼다. 이름은 "sfx" 또는 "bgm".
+     끊어지듯 바뀌면 딱 소리가 나므로 짧게 미끄러뜨린다. */
+  function setVolume(갈래, v) {
+    const x = Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+    if (갈래 !== "sfx" && 갈래 !== "bgm") return;
+    볼륨[갈래] = x;
+    const g = 갈래 === "sfx" ? sfx : bgmBus;
+    if (g && ac) g.gain.setTargetAtTime(x, ac.currentTime, 0.02);
+  }
+
+  function getVolume(갈래) { return 볼륨[갈래] == null ? 1 : 볼륨[갈래]; }
 
   // 지직거리는 잡음의 재료. 한 번 만들어 두고 돌려 쓴다.
   let noiseBuf = null;
@@ -61,7 +94,7 @@ const Sound = (() => {
 
     src.connect(bp); bp.connect(gTop); gTop.connect(out);
     src.connect(lp); lp.connect(gLow); gLow.connect(out);
-    out.connect(master);
+    out.connect(sfx);
     src.start();
 
     return { src, bp, gTop, gLow, out };
@@ -108,7 +141,7 @@ const Sound = (() => {
     const vol = 0.05 * (power || 1);
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06 + Math.random() * 0.05);
-    src.connect(bp); bp.connect(g); g.connect(master);
+    src.connect(bp); bp.connect(g); g.connect(sfx);
     src.start(t); src.stop(t + 0.16);
   }
 
@@ -124,7 +157,7 @@ const Sound = (() => {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(master);
+    o.connect(g); g.connect(sfx);
     o.start(t); o.stop(t + dur + 0.02);
   }
 
@@ -141,7 +174,7 @@ const Sound = (() => {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(master);
+    o.connect(g); g.connect(sfx);
     o.start(t); o.stop(t + dur + 0.02);
   }
 
@@ -208,7 +241,7 @@ const Sound = (() => {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(0.16 + p * 0.16, t + 0.006);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17 + p * 0.12);
-    o.connect(g); g.connect(master);
+    o.connect(g); g.connect(sfx);
     o.start(t); o.stop(t + 0.34);
 
     // 표면 — 돌끼리 부딪히는 거친 결
@@ -218,7 +251,7 @@ const Sound = (() => {
     const ng = c.createGain();
     ng.gain.setValueAtTime(0.10 + p * 0.12, t);
     ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.06 + p * 0.05);
-    n.connect(bp); bp.connect(ng); ng.connect(master);
+    n.connect(bp); bp.connect(ng); ng.connect(sfx);
     n.start(t); n.stop(t + 0.2);
   }
 
@@ -240,7 +273,7 @@ const Sound = (() => {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(0.020 + p * 0.055, t + 0.05);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
-    n.connect(bp); bp.connect(g); g.connect(master);
+    n.connect(bp); bp.connect(g); g.connect(sfx);
     n.start(t); n.stop(t + 0.24);
   }
 
@@ -258,7 +291,7 @@ const Sound = (() => {
     const g = c.createGain();
     g.gain.setValueAtTime(0.20, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-    n.connect(hp); hp.connect(g); g.connect(master);
+    n.connect(hp); hp.connect(g); g.connect(sfx);
     n.start(t); n.stop(t + 0.16);
 
     // 떡이 갈라지며 나는 낮고 짧은 소리
@@ -275,7 +308,7 @@ const Sound = (() => {
     const bp = c.createBiquadFilter();
     bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 0.9;
     const g = c.createGain(); g.gain.value = 0;
-    src.connect(bp); bp.connect(g); g.connect(master);
+    src.connect(bp); bp.connect(g); g.connect(sfx);
     src.start();
     slid = { src, bp, g };
   }
@@ -318,7 +351,7 @@ const Sound = (() => {
 
     const out = c.createGain();
     out.gain.value = 0;
-    out.connect(master);
+    out.connect(sfx);
 
     const src = noise();
     const lp = c.createBiquadFilter();
@@ -410,7 +443,7 @@ const Sound = (() => {
     const lp = c.createBiquadFilter();
     lp.type = "lowpass"; lp.frequency.value = 220; lp.Q.value = 3;
     g.gain.value = 0;
-    o.connect(lp); lp.connect(g); g.connect(master);
+    o.connect(lp); lp.connect(g); g.connect(sfx);
     o.start();
     tens = { o, g, lp };
   }
@@ -468,6 +501,9 @@ const Sound = (() => {
     return (v == null ? 1 : v) * 기본;
   }
 
+  /* 이 소리가 어느 갈래로 나갈지. 배경음악만 따로 가고 나머지는 효과음이다. */
+  function 버스(이름) { return 이름 === "bgm" ? bgmBus : sfx; }
+
   /* ── 배경음악 ──────────────────────────────────────────────
      게임에 들어갈 때마다 곡을 하나 뽑아 튼다.
 
@@ -477,6 +513,9 @@ const Sound = (() => {
 
   function bgm(vol) {
     const c = ctx(); if (!c || muted || 도는것.bgm) return;
+    // 손잡이를 0 으로 내려 뒀으면 받지도 않는다. 안 들을 곡을 350KB 받을 이유가 없다.
+    // 나중에 손잡이를 올리면 그때 이 함수가 다시 불린다.
+    if (볼륨.bgm <= 0) return;
     const n = 1 + Math.floor(Math.random() * 배경음악수);
     const 주소 = "assets/_sounds/bgm/배경음악_" + n + ".mp3";
     fetch(주소)
@@ -518,7 +557,7 @@ const Sound = (() => {
     src.playbackRate.value = o.rate || 1;
     const g = c.createGain();
     g.gain.value = 크기(이름, o.vol);
-    src.connect(g); g.connect(master);
+    src.connect(g); g.connect(버스(이름));
     src.start();
     return true;
   }
@@ -533,7 +572,7 @@ const Sound = (() => {
     src.buffer = buf; src.loop = true;
     const g = c.createGain();
     g.gain.value = 0;
-    src.connect(g); g.connect(master);
+    src.connect(g); g.connect(버스(이름));
     src.start();
     // 갑자기 켜지면 놀라므로 스며들게 한다
     g.gain.setTargetAtTime(크기(이름, o.vol == null ? 0.5 : o.vol), c.currentTime, o.fade || 0.25);
@@ -573,5 +612,6 @@ const Sound = (() => {
            ambience, ambienceStop,
            duck, tensionStart, tensionSet, tensionStop,
            use, play, loop, loopSet, loopStop, bgm, bgmStop,
+           setVolume, getVolume, isLooping: (이름) => !!도는것[이름],
            setMuted, isMuted: () => muted };
 })();
