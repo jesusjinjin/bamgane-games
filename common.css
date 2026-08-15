@@ -128,6 +128,13 @@ html, body {
 .tile.sm { width: 44px; height: 44px; border-radius: 12px; }
 .tile.sm svg { width: 24px; height: 24px; }
 
+/* 2D 그림 타일. 그림이 타일을 꽉 채우므로 밑에 깔린 색 그라데이션은 가려진다.
+   목록 화면과 게임 상단 바가 같은 그림을 쓰게 하려고 공용에 둔다 —
+   한쪽에만 두면 목록에서 본 그림과 들어가서 보는 그림이 달라진다. */
+.tile.pic { background: none; overflow: hidden; border-radius: 15px; }
+.tile.pic img { width: 100%; height: 100%; display: block; }
+.tile.sm.pic { border-radius: 12px; }
+
 /* ── 게임 화면 상단 바 ───────────────────────────────────── */
 .topbar {
   height: 88px; display: flex; align-items: center; gap: 14px;
