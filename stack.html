@@ -6,9 +6,9 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>돌탑 쌓기</title>
-<link rel="stylesheet" href="common.css?v=69">
-<script src="common.js?v=69"></script>
-<script src="sound.js?v=69"></script>
+<link rel="stylesheet" href="common.css?v=73">
+<script src="common.js?v=73"></script>
+<script src="sound.js?v=73"></script>
 <style>
   :root { --accent-1: #0ea5e9; --accent-2: #4f46e5; }
 
@@ -137,6 +137,55 @@ let stoneReady = false;
 stoneImg.onload = () => { stoneReady = true; draw(); };
 stoneImg.src = "assets/stack/stone.webp";
 
+/* 돌을 붉은 벽돌빛으로 물들인다.
+
+   돌 그림은 한 장뿐이라 그대로 쌓으면 같은 벽돌이 열네 번 반복돼 보인다.
+   층마다 색을 조금씩 달리하면 진짜 쌓아 올린 담벼락처럼 보인다.
+
+   곱셈(multiply)으로 얹으면 원본보다 밝아질 수가 없어서 팥죽색이 된다.
+   원본 베이지가 169 인데 벽돌은 230 쯤 되어야 하기 때문이다.
+   그래서 "color" 로 얹는다 — 색은 새로 입히고 밝기는 원본 무늬를 그대로 쓴다.
+   얹고 나면 알파가 사각형으로 번지므로 원본 알파로 다시 오려낸다. */
+const 물든돌 = {};                  // 색 → 물들인 그림. 같은 색은 다시 안 만든다
+
+/* 벽돌 색은 몇 가지 중에서 뽑는다.
+
+   매번 새로 만들면 열네 층이 전부 다른 색이 되어 알록달록해진다.
+   진짜 담벼락은 대부분 같은 색이고 사이사이 조금 다른 것이 섞여 있다.
+   그래서 바탕색을 여러 번 넣어 자주 걸리게 하고, 나머지를 가끔 섞는다. */
+const 벽돌색들 = [
+  "hsl(12,72%,56%)",   // 바탕
+  "hsl(12,72%,56%)",
+  "hsl(12,72%,56%)",
+  "hsl(14,66%,62%)",   // 조금 밝은 것
+  "hsl(9,64%,48%)",    // 조금 어두운 것
+  "hsl(18,60%,59%)",   // 주황기가 도는 것
+];
+
+function 벽돌색() {
+  return 벽돌색들[Math.floor(Math.random() * 벽돌색들.length)];
+}
+
+function 물들이기(색) {
+  if (물든돌[색]) return 물든돌[색];
+  const c = document.createElement("canvas");
+  c.width = stoneImg.naturalWidth || 216;
+  c.height = stoneImg.naturalHeight || 80;
+  const x = c.getContext("2d");
+  x.drawImage(stoneImg, 0, 0);
+  x.globalCompositeOperation = "color";            // 색만 갈아 끼우고 밝기는 유지
+  x.fillStyle = 색;
+  x.fillRect(0, 0, c.width, c.height);
+  // 원본이 베이지라 "color" 만으로는 채도가 옅다. 한 번 더 얹어 벽돌빛을 낸다.
+  x.globalCompositeOperation = "saturation";
+  x.fillStyle = 색;
+  x.fillRect(0, 0, c.width, c.height);
+  x.globalCompositeOperation = "destination-in";   // 원본 알파로 다시 오려낸다
+  x.drawImage(stoneImg, 0, 0);
+  물든돌[색] = c;
+  return c;
+}
+
 let state = "ready";             // ready | running | done
 let tower = [];                  // 쌓인 층들 { x, w }
 let cur = null;                  // 지금 움직이는 막대
@@ -148,7 +197,7 @@ function reset() {
   Sound.tensionStop();
   state = "ready";
   camera = 0;
-  tower = [{ x: (W - BAR_W) / 2, w: BAR_W }];   // 맨 아래 한 층은 주어진다
+  tower = [{ x: (W - BAR_W) / 2, w: BAR_W, 색: 벽돌색() }];   // 맨 아래 한 층은 주어진다
   cur = null;
   slot.innerHTML = "";
   status.innerHTML = "<b>" + R.layers + "</b>층까지 쌓으면 성공";
@@ -181,7 +230,7 @@ function showFloor() {
 function start() {
   state = "running";
   camera = 0;
-  tower = [{ x: (W - BAR_W) / 2, w: BAR_W }];
+  tower = [{ x: (W - BAR_W) / 2, w: BAR_W, 색: 벽돌색() }];
   spawn();
   slot.innerHTML = "";
   showFloor();
@@ -205,6 +254,7 @@ function spawn() {
     w: top.w,
     dir: 0,
     speed: SPEED_BASE + tower.length * SPEED_STEP,
+    색: 벽돌색(),                     // 이 돌이 가질 색. 얹히면 그대로 남는다
   };
   cur.dir = cur.x === 0 ? 1 : -1;
 }
@@ -235,7 +285,7 @@ function drop() {
 
   if (overlap <= 0) { Sound.thud(1); finish(false, "빗나감"); return; }
 
-  tower.push({ x: left, w: overlap });
+  tower.push({ x: left, w: overlap, 색: cur.색 });
 
   // 얼마나 정확히 얹었는가. 1 이면 딱 맞았고 0 에 가까울수록 아슬아슬하다.
   const 정확도 = overlap / top.w;
@@ -282,15 +332,15 @@ function finish(ok, why) {
 
 // 돌 한 장을 그 층의 폭에 맞춰 늘려 그린다.
 // 깎여 좁아진 돌도 같은 그림을 쓰므로 탑이 한 덩어리로 보인다.
-function drawStone(x, y, w, dim) {
+function drawStone(x, y, w, dim, 색) {
   if (!stoneReady) {                       // 그림이 아직이면 실루엣이라도
-    ctx.fillStyle = "#a8a094";
+    ctx.fillStyle = 색 || "#c0503a";
     roundRect(x, y, w, BH - 2 * SCALE, 4 * SCALE); ctx.fill();
     return;
   }
   ctx.save();
   if (dim) ctx.globalAlpha = 0.92;
-  ctx.drawImage(stoneImg, x, y, w, BH);
+  ctx.drawImage(색 ? 물들이기(색) : stoneImg, x, y, w, BH);
   ctx.restore();
 }
 
@@ -324,13 +374,13 @@ function draw() {
     const b = tower[i];
     const y = BASE_Y - (i + 1) * BH + camera;
     if (y < -BH || y > H) continue;
-    drawStone(b.x, y, b.w, true);
+    drawStone(b.x, y, b.w, true, b.색);
   }
 
   // 지금 움직이는 돌
   if (cur) {
     const y = BASE_Y - (tower.length + 1) * BH + camera;
-    drawStone(cur.x, y, cur.w, false);
+    drawStone(cur.x, y, cur.w, false, cur.색);
   }
 }
 
