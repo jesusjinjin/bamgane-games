@@ -26,7 +26,7 @@ const RULES = {
   // 한 번 자를 때보다 기준을 넓힌 이유: 두 번 연속이면 성공률이 제곱으로 떨어진다.
   // 0.15% 를 그대로 두면 백 번에 한 번 되는 게임이 된다.
   ricecut:  { cuts: 2,                          // 자르는 횟수 (조각은 3개)
-              tolSum: 1.50,                     // 두 오차의 합이 이 % 안이면 성공
+              tolSum: 1.00,                     // 두 오차의 합이 이 % 안이면 성공
               minGapPct: 20,                    // 조각 하나가 최소 이만큼은 되어야 한다
               tolPct: 0.15,                     // (옛 단일 컷 기준. 참고용으로 남겨 둠)
               sweepMin: 2.4, sweepMax: 2.9,     // 편도 기준 시간(초)
@@ -76,7 +76,7 @@ const RULES = {
      정확히 맞아떨어진다(벌어짐 1.00배). 자가 바뀌었으므로 아래 숫자는
      예전 ΔE76 값의 60% 쯤에 해당한다. */
   oddone:   { cols: 10, rows: 6, limitSec: 3.5,
-              단계: [12.0, 9.0, 6.5, 4.5, 3.0],   // 회차별 목표 ΔE2000
+              단계: [3.2, 3.2, 3.2, 2.9, 2.7],    // 회차별 목표 ΔE2000
               흔들림: 0.12 },                      // 목표의 ±12% 안에서 뽑는다
   cutline:  { tolPx: 3.0 },                                 // 직선에서 벗어나도 되는 최대 거리
   // 바늘은 멈출 때까지 계속 돈다. 여러 바퀴 보고 노릴 수 있으므로
@@ -356,7 +356,38 @@ function stageEffect(ok) {
 }
 
 /* 판정 화면 */
+/* ── 깬 게임 기록 ───────────────────────────────────────────────
+   랜덤모드에서 이미 깬 게임이 또 걸리면 김이 샌다. 성공한 게임을 적어 두고
+   목록 화면에서 뽑기 대상에서 뺀다.
+
+   적는 자리를 verdictHtml 한 곳으로 잡았다. 열두 게임이 성공을 알리는 통로가
+   여기 하나뿐이라, 게임 파일은 한 줄도 안 고쳐도 전부 걸린다.
+   나중에 게임을 더 만들어도 저절로 따라온다. */
+const 깬기록 = (() => {
+  const 열쇠 = "bg_cleared";
+  const 읽기 = () => {
+    try { return JSON.parse(localStorage.getItem(열쇠)) || []; }
+    catch (_) { return []; }
+  };
+  const 쓰기 = (목록) => {
+    try { localStorage.setItem(열쇠, JSON.stringify(목록)); } catch (_) {}
+  };
+  return {
+    목록: 읽기,
+    깼나: (파일) => 읽기().indexOf(파일) >= 0,
+    더하기: (파일) => { const m = 읽기(); if (m.indexOf(파일) < 0) { m.push(파일); 쓰기(m); } },
+    비우기: () => 쓰기([]),
+  };
+})();
+
+// 지금 보고 있는 게임의 파일 이름 (목록 화면이면 빈 문자열)
+function 이게임() {
+  const 끝 = location.pathname.split("/").pop() || "";
+  return 끝 === "index.html" ? "" : 끝;
+}
+
 function verdictHtml(ok, detail, sub) {
+  if (ok) { const f = 이게임(); if (f) 깬기록.더하기(f); }
   // 돌려준 글자가 화면에 붙은 다음 연출이 시작되도록 한 박자 미룬다
   queueMicrotask(() => stageEffect(ok));
   return '<div class="verdict ' + (ok ? "ok" : "fail") + '">'

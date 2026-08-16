@@ -6,9 +6,9 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>콩 고르기</title>
-<link rel="stylesheet" href="common.css?v=106">
-<script src="common.js?v=106"></script>
-<script src="sound.js?v=106"></script>
+<link rel="stylesheet" href="common.css?v=112">
+<script src="common.js?v=112"></script>
+<script src="sound.js?v=112"></script>
 <style>
   :root { --accent-1: #14b8a6; --accent-2: #0d9488; }
 
@@ -290,8 +290,11 @@ const 콩종류 = [
   { 이름: "완두콩",   h: [82, 104],  s: [42, 58], l: [46, 56] },
   { 이름: "강낭콩",   h: [338, 354], s: [44, 60], l: [44, 54] },
   { 이름: "동부콩",   h: [28, 40],   s: [24, 38], l: [62, 72] },
-  { 이름: "쥐눈이콩", h: [258, 276], s: [18, 30], l: [38, 46] },
-  { 이름: "서리태",   h: [198, 218], s: [20, 34], l: [40, 48] },
+  // 보랏빛·잿빛 두 가지는 마지막 판에만 내보낸다. 멍석이 누런 짚빛이라
+  // 이 둘만 바탕에서 유난히 도드라져 보이는데, 그러면 눈이 콩 색부터
+  // 낯설어져서 "다른 한 알 찾기" 와는 다른 일이 되어 버린다.
+  { 이름: "쥐눈이콩", h: [258, 276], s: [18, 30], l: [38, 46], 막판만: true },
+  { 이름: "서리태",   h: [198, 218], s: [20, 34], l: [40, 48], 막판만: true },
   { 이름: "녹두",     h: [64, 80],   s: [40, 55], l: [52, 62] },
 ];
 
@@ -328,8 +331,11 @@ function 크기찾기(바탕, 축, 방향, 목표) {
 // 판을 새로 깐다. 콩 종류·어긋나는 축·자리 모두 매판 바뀐다.
 let 이번판 = {};                  // 무엇이 어떻게 어긋났는지 (확인용)
 
-function build(목표) {
-  const 종류 = 콩종류[Math.floor(Math.random() * 콩종류.length)];
+function build(목표, 회차) {
+  // 막판 전용 콩은 마지막 회차에만 후보에 넣는다
+  const 막판 = 회차 === ROUNDS - 1;
+  const 후보 = 막판 ? 콩종류 : 콩종류.filter((t) => !t.막판만);
+  const 종류 = 후보[Math.floor(Math.random() * 후보.length)];
   const 바탕 = { h: 사이(종류.h), s: 사이(종류.s), l: 사이(종류.l) };
   const 방향 = Math.random() < 0.5 ? 1 : -1;
 
@@ -370,7 +376,7 @@ function reset() {
   state = "ready";
   round = 0; marks = []; times = [];
   slot.innerHTML = "";
-  build(이번목표(0));
+  build(이번목표(0), 0);
   pad.classList.add("idle");
   status.innerHTML = "<b>" + ROUNDS + "</b>번 연속 &nbsp;·&nbsp; 매판 <b>"
                    + R.limitSec.toFixed(1) + "</b>초 &nbsp;·&nbsp; "
@@ -390,7 +396,7 @@ function start() {
 
 function nextRound() {
   state = "running";
-  build(이번목표(round));
+  build(이번목표(round), round);
   // 첫 프레임이 오기 전에도 회차가 바뀐 게 보이도록 먼저 써 둔다
   status.innerHTML = "<b>" + (round + 1) + "</b> / " + ROUNDS + " 회"
                    + " &nbsp;·&nbsp; 남은 시간 <b class='time'>"

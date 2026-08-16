@@ -9,7 +9,7 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>밤가네 미니게임</title>
-<link rel="stylesheet" href="common.css?v=106">
+<link rel="stylesheet" href="common.css?v=112">
 <style>
   .hub { position: absolute; inset: 0; display: flex;
          flex-direction: column; align-items: center; padding-top: 26px;
@@ -78,6 +78,27 @@
   .game.soon:hover { transform: none; border-color: var(--line); }
   .game.soon .tile { filter: grayscale(.7); box-shadow: none; }
   .game.soon .go { color: var(--text-faint); }
+
+  /* 이미 깬 게임. 랜덤모드일 때만 이렇게 보인다 —
+     일반모드에서는 다시 하고 싶으면 그냥 누르면 된다. */
+  .grid.rand .game.cleared { opacity: .3; pointer-events: none; }
+  .grid.rand .game.cleared .tile { filter: grayscale(.85); box-shadow: none; }
+  .grid.rand .game.cleared .go { color: var(--text-faint); }
+  /* 깼다는 표시. 흐린 카드 위에서도 보이도록 초록으로 둔다. */
+  .grid.rand .game.cleared .go::after { content: " ✓"; color: #4ade80; }
+
+  /* 깬 기록을 지우는 버튼. 깬 것이 하나도 없으면 아예 안 보인다 —
+     늘 떠 있으면 누를 일 없는 버튼이 화면만 차지한다. */
+  .reset {
+    margin-top: 9px; padding: 5px 13px 6px;
+    font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: .2px;
+    color: var(--text-dim); background: rgba(255,255,255,.05);
+    border: 1px solid var(--line); border-radius: 9px; cursor: pointer;
+    transition: background .16s, color .16s, border-color .16s;
+  }
+  .reset:hover { color: #fff; background: rgba(255,255,255,.1);
+                 border-color: rgba(255,255,255,.3); }
+  .reset[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -89,13 +110,14 @@
       <button id="mNormal" class="on">일반모드</button>
       <button id="mRandom">랜덤모드</button>
     </div>
+    <button class="reset" id="reset" hidden>깬 게임 초기화</button>
     <div class="note" id="note"></div>
     <div class="grid" id="grid"></div>
   </div>
 </div></div>
 
-<script src="common.js?v=106"></script>
-<script src="sound.js?v=106"></script>
+<script src="common.js?v=112"></script>
+<script src="sound.js?v=112"></script>
 <script>
 "use strict";
 
@@ -160,6 +182,7 @@ for (const g of GAMES) {
   a.innerHTML = tile
     + '<div class="name">' + g.name + "</div>"
     + '<div class="go">' + (g.soon ? "준비 중" : "플레이 &nbsp;→") + "</div>";
+  if (g.file) a.dataset.file = g.file;
   grid.appendChild(a);
 }
 
@@ -175,19 +198,45 @@ const mNormal = document.getElementById("mNormal");
 const mRandom = document.getElementById("mRandom");
 const note    = document.getElementById("note");
 
+const reset = document.getElementById("reset");
+
 // 준비 중인 게임은 뽑히면 안 된다
-const playable = [...grid.children].filter((el) => !el.classList.contains("soon"));
+const 만든것 = [...grid.children].filter((el) => !el.classList.contains("soon"));
+
+/* 이미 깬 게임은 랜덤 뽑기에서 뺀다.
+
+   기록은 게임 화면에서 성공할 때 브라우저에 적힌다(common.js 의 깬기록).
+   여기서는 읽어서 카드에 표시만 하고, 뽑을 때 빼면 된다.
+
+   일반모드에서는 빼지 않는다 — 깬 게임을 다시 해보고 싶을 수 있고,
+   그걸 막을 이유가 없다. 랜덤모드에서만 흐려지고 안 걸린다. */
+let playable = 만든것;
+
+function 깬것표시() {
+  const 깸 = 깬기록.목록();
+  let 수 = 0;
+  for (const el of 만든것) {
+    const 깼다 = 깸.indexOf(el.dataset.file) >= 0;
+    el.classList.toggle("cleared", 깼다);
+    if (깼다) 수++;
+  }
+  playable = 만든것.filter((el) => !el.classList.contains("cleared"));
+  reset.hidden = 수 === 0;
+  reset.textContent = "깬 게임 초기화 (" + 수 + ")";
+  return 수;
+}
+깬것표시();
 
 let spinTimer = 0;
 
 function clearMarks() {
-  for (const el of playable) el.classList.remove("spot", "won");
+  for (const el of 만든것) el.classList.remove("spot", "won");
 }
 
 function toNormal() {
   clearTimeout(spinTimer); spinTimer = 0;
   clearMarks();
-  grid.classList.remove("spinning");
+  grid.classList.remove("spinning", "rand");
   mNormal.classList.add("on");
   mRandom.classList.remove("on");
   note.textContent = "";
@@ -201,12 +250,18 @@ function toRandom() {
   if (grid.classList.contains("spinning")) return;
   mRandom.classList.add("on");
   mNormal.classList.remove("on");
+  grid.classList.add("rand");
+  깬것표시();
   spin();
 }
 
 function spin() {
   const n = playable.length;
-  if (n === 0) return;
+  if (n === 0) {
+    // 다 깼다. 그냥 아무 일도 안 일어나면 버튼이 고장 난 줄 안다.
+    note.innerHTML = "<b>다 깼습니다</b> &nbsp;·&nbsp; 초기화하고 다시 하세요";
+    return;
+  }
   if (n === 1) { land(0); return; }      // 하나뿐이면 돌릴 것이 없다
 
   clearTimeout(spinTimer);               // 남아 있던 예약이 있으면 먼저 치운다
@@ -261,6 +316,16 @@ function land(k) {
 mNormal.addEventListener("click", toNormal);
 mRandom.addEventListener("click", toRandom);
 
+reset.addEventListener("click", () => {
+  clearTimeout(spinTimer); spinTimer = 0;
+  clearMarks();
+  grid.classList.remove("spinning");
+  깬기록.비우기();
+  깬것표시();
+  note.innerHTML = "<b>초기화</b> 했습니다";
+  Sound.tick(1.3);
+});
+
 /* 게임에 들어갔다가 브라우저 뒤로가기로 돌아오면, 브라우저는 이 화면을
    떠날 때 모습 그대로 되살린다(bfcache). 룰렛이 돌던 상태에서 넘어갔으므로
    돌아오면 "도는 중" 인 채로 얼어 있고, 죽은 예약도 남아 있다.
@@ -273,6 +338,8 @@ addEventListener("pageshow", () => {
   clearMarks();
   grid.classList.remove("spinning");
   note.textContent = "";
+  // 방금 그 게임을 깨고 돌아온 것일 수 있다. 기록을 다시 읽는다.
+  깬것표시();
 });
 </script>
 </body>
