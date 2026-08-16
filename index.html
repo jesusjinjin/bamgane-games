@@ -9,7 +9,7 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>밤가네 미니게임</title>
-<link rel="stylesheet" href="common.css?v=86">
+<link rel="stylesheet" href="common.css?v=106">
 <style>
   .hub { position: absolute; inset: 0; display: flex;
          flex-direction: column; align-items: center; padding-top: 26px;
@@ -41,7 +41,7 @@
 
   /* 4열 4줄. 게임이 늘면 카드를 낮춰서 무대 안에 그대로 담는다. */
   .grid { margin-top: 11px; display: grid;
-          grid-template-columns: repeat(3, 236px); gap: 11px; }
+          grid-template-columns: repeat(4, 236px); gap: 11px; }
 
   /* 랜덤이 도는 동안은 카드를 눌러도 들어가지 않는다 */
   .grid.spinning .game { pointer-events: none; }
@@ -94,8 +94,8 @@
   </div>
 </div></div>
 
-<script src="common.js?v=86"></script>
-<script src="sound.js?v=86"></script>
+<script src="common.js?v=106"></script>
+<script src="sound.js?v=106"></script>
 <script>
 "use strict";
 
@@ -110,6 +110,8 @@ const GAMES = [
     img: "assets/_icons/curling.webp" },
   { file: "stack.html",     name: "돌탑 쌓기",       c1: "#0ea5e9", c2: "#4f46e5", icon: "stack",
     img: "assets/_icons/stack.webp" },
+  { file: "oddone.html",    name: "콩 고르기",       c1: "#14b8a6", c2: "#0d9488", icon: "odd",
+    img: "assets/_icons/oddone.webp" },
 ];
 
 // 아이콘은 선으로만 그린다. 배경 타일 색이 게임을 구분해 준다.

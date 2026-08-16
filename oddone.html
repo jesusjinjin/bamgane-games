@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="cache-control" content="no-cache">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
+<title>콩 고르기</title>
+<link rel="stylesheet" href="common.css?v=106">
+<script src="common.js?v=106"></script>
+<script src="sound.js?v=106"></script>
+<style>
+  :root { --accent-1: #14b8a6; --accent-2: #0d9488; }
+
+  /* 마당 멍석을 위에서 내려다본 배경. 가운데는 결만 있어 콩이 잘 보인다. */
+  .stage { background: url('assets/oddone/bg.webp') center / cover no-repeat; }
+  .topbar { background: rgba(22, 22, 40, .42); }
+  .stage::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(180deg, rgba(20,18,14,.22) 0%, rgba(20,18,14,.03) 26%,
+                                        rgba(20,18,14,.24) 62%, rgba(20,18,14,.54) 100%);
+  }
+  .body { z-index: 1; }
+
+  /* 판정 → 콩 → 회차 → 남은 시간 → 버튼.
+     140 + 300 + 16 + 40 + 68 = 564 로 게임 영역 안에 들어간다. */
+  .board { width: 100%; display: grid; justify-items: center;
+           grid-template-rows: 140px 300px 16px 40px auto; align-content: center; }
+  .slot    { display: grid; place-items: center; order: 1; align-self: end; }
+  /* 콩판을 86px 끌어올린다.
+
+     처음에는 45px 만 올려 맨 윗줄을 조약돌 밀기의 얼음판 윗선(247px)에 맞췄는데,
+     콩판 아래가 버튼 쪽으로 몰려 보여서 한 줄만큼(31 + 여백 10 = 41px) 더 올렸다.
+     칸 크기는 그대로 두고 자리만 옮기므로 버튼과 회차 표시는 움직이지 않는다. */
+  .padslot { display: grid; place-items: center; order: 2;
+             transform: translateY(-86px); }
+  .rounds  { order: 3; }
+  .status  { order: 4; align-self: center; }
+  .controls{ text-align: center; order: 5; }
+
+  .rounds { display: flex; gap: 9px; align-items: center; }
+  .pip { width: 34px; height: 6px; border-radius: 3px; background: rgba(30,51,48,.85); }
+  .pip.ok   { background: #22c55e; }
+  .pip.fail { background: #e11d48; }
+
+  /* 10열 6행. 콩 그림은 무채색이라 코드가 색을 입혀 넣는다. */
+  .pad { display: grid; gap: 10px; }
+  .cell { width: 48px; height: 31px; cursor: pointer;
+          background: center / contain no-repeat;
+          filter: drop-shadow(0 2px 3px rgba(20,14,6,.45)); }
+  /* 시작 전에는 콩을 덮어 둔다. 미리 훑어볼 수 없게. */
+  .pad.idle .cell { background-image: none !important;
+                    background-color: rgba(46,40,30,.55);
+                    border-radius: 50%; cursor: default; filter: none; }
+
+  .cell.hit  { outline: 3px solid var(--ok); outline-offset: 3px; border-radius: 50%; }
+  .cell.miss { outline: 3px solid #e11d48; outline-offset: 3px; border-radius: 50%; }
+
+  .status { font-size: 15px; color: var(--text-dim); letter-spacing: .3px;
+            text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+  .status b { color: #fff; font-size: 17px; }
+  .status .time { font-variant-numeric: tabular-nums; }
+  .verdict .detail { text-shadow: 0 3px 10px rgba(0,0,0,.9); }
+  .verdict .sub { display: none; }
+  .verdict .mark { background: rgba(16,20,26,.72); }
+  .verdict.ok .mark { background: rgba(16,40,26,.72); border-color: #4ade80; }
+</style>
+</head>
+<body>
+<div id="fit"><div class="stage">
+
+  <div class="topbar">
+    <a class="back" href="index.html" title="목록으로">←</a>
+    <div class="tile sm pic"><img src="assets/_icons/oddone.webp" alt=""></div>
+    <div class="titles">
+      <h1>콩 고르기</h1>
+      <p>Odd One Out</p>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="play">
+      <div class="board">
+        <div class="padslot"><div class="pad idle" id="pad"></div></div>
+        <div class="status" id="status"></div>
+        <div class="slot" id="slot"></div>
+        <div class="controls">
+          <button class="btn" id="go">도 전</button>
+          <div class="hint">색이 다른 콩을 클릭</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rules card">
+      <h2>규칙</h2>
+      <ul>
+        <li>딱 한 알만 색이 다릅니다</li>
+        <li>5번 연속 · 갈수록 차이가 옅어집니다</li>
+        <li>다른 콩을 누르면 즉시 실패</li>
+        <li>기회는 한 번뿐입니다</li>
+        <li><b>[성공기준]</b> 매판 3.5초 이내</li>
+      </ul>
+    </aside>
+  </div>
+
+</div></div>
+
+<script>
+"use strict";
+
+const R = RULES.oddone;
+const pad    = document.getElementById("pad");
+const status = document.getElementById("status");
+const slot   = document.getElementById("slot");
+const go     = document.getElementById("go");
+
+const COUNT = R.cols * R.rows;
+pad.style.gridTemplateColumns = "repeat(" + R.cols + ", 48px)";
+
+/* 콩 그림은 무채색이다. 여기에 색을 곱해 쓴다.
+   색과 정답 자리가 매판 바뀌므로 색칠된 콩을 미리 받아 둘 수 없다.
+   판마다 두 벌(보통 콩 · 다른 콩)만 만들어 60칸에 나눠 준다. */
+const beanImg = new Image();
+let beanReady = false;
+beanImg.onload = () => { 평균재기(); beanReady = true; reset(); };
+beanImg.src = "assets/oddone/bean.webp";
+
+/* ── 색 차이를 사람 눈 기준으로 재는 자 ──────────────────────────
+   회차마다 "이만큼 다르게" 를 ΔE 로 정해 두고, 그 ΔE 가 나오는
+   색을 거꾸로 찾아 쓴다. 그래야 어떤 콩이 걸려도 난이도가 같다.
+
+   곱하기로 칠하므로 칠한 뒤의 평균색은 정확히
+   (콩 그림의 평균색 × 칠한 색 ÷ 255) 이다. 캔버스를 만들어 재 볼 필요 없이
+   이 식으로 바로 얻을 수 있어서, 후보 색을 수십 번 따져 봐도 빠르다. */
+let 바탕평균 = { r: 200, g: 200, b: 200 };
+
+function 평균재기() {
+  const c = document.createElement("canvas");
+  c.width = beanImg.width; c.height = beanImg.height;
+  const x = c.getContext("2d");
+  x.drawImage(beanImg, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 200) continue;          // 투명한 바깥은 뺀다
+    r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+  }
+  if (n) 바탕평균 = { r: r / n, g: g / n, b: b / n };
+}
+
+function hsl2rgb(h, s, l) {
+  h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  let t;
+  if (h < 60)       t = [c, x, 0];
+  else if (h < 120) t = [x, c, 0];
+  else if (h < 180) t = [0, c, x];
+  else if (h < 240) t = [0, x, c];
+  else if (h < 300) t = [x, 0, c];
+  else              t = [c, 0, x];
+  return { r: (t[0] + m) * 255, g: (t[1] + m) * 255, b: (t[2] + m) * 255 };
+}
+
+// 이 색으로 칠했을 때 콩이 띠게 될 평균색
+function 칠한색(h, s, l) {
+  const t = hsl2rgb(h, s, l);
+  return { r: 바탕평균.r * t.r / 255,
+           g: 바탕평균.g * t.g / 255,
+           b: 바탕평균.b * t.b / 255 };
+}
+
+function lab(c) {
+  const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const R = f(c.r), G = f(c.g), B = f(c.b);
+  let X = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047;
+  let Y = (R * 0.2126 + G * 0.7152 + B * 0.0722);
+  let Z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883;
+  const k = (t) => t > 0.008856 ? Math.cbrt(t) : (7.787 * t + 16 / 116);
+  X = k(X); Y = k(Y); Z = k(Z);
+  return { L: 116 * Y - 16, a: 500 * (X - Y), b: 200 * (Y - Z) };
+}
+
+/* 두 색이 사람 눈에 얼마나 달라 보이는가 (CIEDE2000).
+
+   Lab 위 직선거리(ΔE76)로 재면 안 된다. 사람 눈은 채도가 높을수록 같은 색
+   차이를 둔하게 느끼는데 직선거리에는 그 보정이 없다. 그래서 숫자를 똑같이
+   9.0 으로 맞춰 놓아도 실제 체감이 콩마다 크게 벌어졌다.
+
+     팥 × 진하기      2.65   ← 숫자만 9 이고 사실상 안 보인다
+     동부콩 × 색조    9.25   ← 같은 설정인데 3.5배 잘 보인다
+
+   아래 식은 그 보정을 넣은 표준 자다. 길지만 매판 스무 번쯤만 부르므로
+   느려질 걱정은 없다. 이걸 쓰면 어떤 콩이 걸리든 그 회차의 난이도가 같다. */
+function 차이(c1, c2) {
+  const A = lab(c1), B = lab(c2);
+  const C1 = Math.hypot(A.a, A.b), C2 = Math.hypot(B.a, B.b);
+  const Cb = (C1 + C2) / 2;
+  const G = 0.5 * (1 - Math.sqrt(Math.pow(Cb, 7) / (Math.pow(Cb, 7) + Math.pow(25, 7))));
+  const a1 = (1 + G) * A.a, a2 = (1 + G) * B.a;
+  const C1p = Math.hypot(a1, A.b), C2p = Math.hypot(a2, B.b);
+  const 각 = (x, y) => { if (x === 0 && y === 0) return 0;
+                         const d = Math.atan2(y, x) * 180 / Math.PI; return d < 0 ? d + 360 : d; };
+  const h1p = 각(a1, A.b), h2p = 각(a2, B.b);
+
+  const dLp = B.L - A.L, dCp = C2p - C1p;
+  let dhp = 0;
+  if (C1p * C2p !== 0) {
+    dhp = h2p - h1p;
+    if (dhp > 180) dhp -= 360; else if (dhp < -180) dhp += 360;
+  }
+  const dHp = 2 * Math.sqrt(C1p * C2p) * Math.sin(dhp * Math.PI / 360);
+
+  const Lbp = (A.L + B.L) / 2, Cbp = (C1p + C2p) / 2;
+  let hbp = h1p + h2p;
+  if (C1p * C2p !== 0) {
+    if (Math.abs(h1p - h2p) > 180) hbp += (hbp < 360 ? 360 : -360);
+    hbp /= 2;
+  }
+  const T = 1 - 0.17 * Math.cos((hbp - 30) * Math.PI / 180)
+              + 0.24 * Math.cos(2 * hbp * Math.PI / 180)
+              + 0.32 * Math.cos((3 * hbp + 6) * Math.PI / 180)
+              - 0.20 * Math.cos((4 * hbp - 63) * Math.PI / 180);
+  const dTh = 30 * Math.exp(-Math.pow((hbp - 275) / 25, 2));
+  const Rc = 2 * Math.sqrt(Math.pow(Cbp, 7) / (Math.pow(Cbp, 7) + Math.pow(25, 7)));
+  const Sl = 1 + (0.015 * Math.pow(Lbp - 50, 2)) / Math.sqrt(20 + Math.pow(Lbp - 50, 2));
+  const Sc = 1 + 0.045 * Cbp;
+  const Sh = 1 + 0.015 * Cbp * T;
+  const Rt = -Math.sin(2 * dTh * Math.PI / 180) * Rc;
+
+  return Math.sqrt(Math.pow(dLp / Sl, 2) + Math.pow(dCp / Sc, 2) + Math.pow(dHp / Sh, 2)
+                   + Rt * (dCp / Sc) * (dHp / Sh));
+}
+
+function tintBean(h, s, l) {
+  if (!beanReady) return "";
+  const c = document.createElement("canvas");
+  c.width = beanImg.width; c.height = beanImg.height;
+  const x = c.getContext("2d");
+  x.drawImage(beanImg, 0, 0);
+  // 밝기와 결을 남긴 채 색만 입힌다
+  x.globalCompositeOperation = "multiply";
+  x.fillStyle = "hsl(" + h + "," + s.toFixed(1) + "%," + l.toFixed(2) + "%)";
+  x.fillRect(0, 0, c.width, c.height);
+  // 곱하기가 투명 부분까지 칠하므로 콩 모양으로 다시 오려 낸다
+  x.globalCompositeOperation = "destination-in";
+  x.drawImage(beanImg, 0, 0);
+  return "url(" + c.toDataURL() + ")";
+}
+
+const roundsBox = document.createElement("div");
+roundsBox.className = "rounds";
+status.before(roundsBox);
+
+// 회차가 오를수록 색 차이가 옅어진다. 마지막 판이 가장 안 보인다.
+const ROUNDS = R.단계.length;
+
+// 회차별 목표 ΔE. 값을 딱 고정하면 몇 판 만에 감이 외워지므로 조금 흔든다.
+function 이번목표(k) {
+  const t = R.단계[k];
+  return t * (1 + (Math.random() * 2 - 1) * R.흔들림);
+}
+
+let state = "ready";     // ready | running | done
+let round = 0;           // 지금 몇 번째
+let marks = [];          // 회차별 성패
+let times = [];          // 회차별 걸린 시간
+let oddIndex = 0;        // 다른 칸의 자리
+let t0 = 0, raf = 0;
+
+function elapsed() { return (performance.now() - t0) / 1000; }
+
+function pips() {
+  roundsBox.innerHTML = "";
+  for (let i = 0; i < ROUNDS; i++) {
+    const p = document.createElement("div");
+    p.className = "pip" + (marks[i] === undefined ? "" : (marks[i] ? " ok" : " fail"));
+    roundsBox.appendChild(p);
+  }
+}
+
+/* 콩 종류. 예전에는 색조를 0~360 아무 데서나 뽑아 파란 콩·보라 콩이 나왔다.
+   실제로 있을 법한 콩으로 묶어 두면 화면이 훨씬 그럴듯해지고,
+   판마다 "오늘은 무슨 콩" 이라는 재미도 생긴다.
+   너무 어두운 것은 넣지 않았다 — 멍석 위에서 콩인지 그림자인지 모른다. */
+const 콩종류 = [
+  { 이름: "메주콩",   h: [40, 50],   s: [52, 68], l: [54, 64] },
+  { 이름: "팥",       h: [4, 14],    s: [58, 72], l: [42, 50] },
+  { 이름: "완두콩",   h: [82, 104],  s: [42, 58], l: [46, 56] },
+  { 이름: "강낭콩",   h: [338, 354], s: [44, 60], l: [44, 54] },
+  { 이름: "동부콩",   h: [28, 40],   s: [24, 38], l: [62, 72] },
+  { 이름: "쥐눈이콩", h: [258, 276], s: [18, 30], l: [38, 46] },
+  { 이름: "서리태",   h: [198, 218], s: [20, 34], l: [40, 48] },
+  { 이름: "녹두",     h: [64, 80],   s: [40, 55], l: [52, 62] },
+];
+
+function 사이(범위) { return 범위[0] + Math.random() * (범위[1] - 범위[0]); }
+
+/* 목표 ΔE 가 나오도록 어긋남의 크기를 거꾸로 찾는다.
+
+   어긋나는 방향도 매판 다르다 — 밝기만 다르면 몇 판 만에
+   "밝은 놈을 찾으면 된다" 가 되어 눈이 한 가지 일만 하게 된다.
+   색조·진하기로도 어긋나게 하면 매판 다른 종류의 눈썰미를 쓴다.
+
+   크기와 ΔE 는 색마다 관계가 달라서 식으로 못 푼다. 대신 ΔE 가
+   크기에 따라 단조롭게 커지므로 반씩 좁혀 가면 스무 번 안에 잡힌다. */
+const 어긋남축 = [
+  { 이름: "밝기",   상한: 26, 적용: (c, m) => ({ h: c.h, s: c.s, l: Math.min(94, Math.max(6, c.l + m)) }) },
+  { 이름: "색조",   상한: 50, 적용: (c, m) => ({ h: c.h + m, s: c.s, l: c.l }) },
+  { 이름: "진하기", 상한: 55, 적용: (c, m) => ({ h: c.h, s: Math.min(100, Math.max(4, c.s + m)), l: c.l }) },
+];
+
+function 크기찾기(바탕, 축, 방향, 목표) {
+  const 기준 = 칠한색(바탕.h, 바탕.s, 바탕.l);
+  const 재기 = (m) => { const o = 축.적용(바탕, 방향 * m);
+                        return 차이(기준, 칠한색(o.h, o.s, o.l)); };
+  // 이 축으로는 목표까지 못 벌어지면 밝기로 되돌린다. 밝기는 어떤 색에서도 벌어진다.
+  if (재기(축.상한) < 목표) return null;
+  let lo = 0, hi = 축.상한;
+  for (let i = 0; i < 24; i++) {
+    const m = (lo + hi) / 2;
+    if (재기(m) < 목표) lo = m; else hi = m;
+  }
+  return 축.적용(바탕, 방향 * ((lo + hi) / 2));
+}
+
+// 판을 새로 깐다. 콩 종류·어긋나는 축·자리 모두 매판 바뀐다.
+let 이번판 = {};                  // 무엇이 어떻게 어긋났는지 (확인용)
+
+function build(목표) {
+  const 종류 = 콩종류[Math.floor(Math.random() * 콩종류.length)];
+  const 바탕 = { h: 사이(종류.h), s: 사이(종류.s), l: 사이(종류.l) };
+  const 방향 = Math.random() < 0.5 ? 1 : -1;
+
+  let 축 = 어긋남축[Math.floor(Math.random() * 어긋남축.length)];
+  let 다른 = 크기찾기(바탕, 축, 방향, 목표);
+  if (!다른) { 축 = 어긋남축[0]; 다른 = 크기찾기(바탕, 축, 방향, 목표); }
+  // 밝기로도 안 되면(아주 밝거나 아주 어두운 콩) 반대쪽으로 밀어 본다
+  if (!다른) { 다른 = 크기찾기(바탕, 축, -방향, 목표) || 축.적용(바탕, -방향 * 축.상한); }
+
+  이번판 = { 콩: 종류.이름, 축: 축.이름,
+             ΔE: 차이(칠한색(바탕.h, 바탕.s, 바탕.l), 칠한색(다른.h, 다른.s, 다른.l)) };
+
+  // 색칠은 판마다 두 번만. 60번 그리면 느려진다.
+  const normal = tintBean(바탕.h, 바탕.s, 바탕.l);
+  const odd    = tintBean(다른.h, 다른.s, 다른.l);
+
+  oddIndex = Math.floor(Math.random() * COUNT);
+  pad.innerHTML = "";
+  for (let i = 0; i < COUNT; i++) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    c.style.backgroundImage = (i === oddIndex) ? odd : normal;
+    c.dataset.i = i;
+    pad.appendChild(c);
+  }
+}
+
+function tick() {
+  const left = Math.max(0, R.limitSec - elapsed());
+  status.innerHTML = "<b>" + (round + 1) + "</b> / " + ROUNDS + " 회"
+                   + " &nbsp;·&nbsp; 남은 시간 <b class='time'>" + left.toFixed(2) + "</b>초";
+  if (left <= 0) { marks.push(false); pips(); finish(false, "시간 초과"); return; }
+  raf = requestAnimationFrame(tick);
+}
+
+function reset() {
+  cancelAnimationFrame(raf);
+  state = "ready";
+  round = 0; marks = []; times = [];
+  slot.innerHTML = "";
+  build(이번목표(0));
+  pad.classList.add("idle");
+  status.innerHTML = "<b>" + ROUNDS + "</b>번 연속 &nbsp;·&nbsp; 매판 <b>"
+                   + R.limitSec.toFixed(1) + "</b>초 &nbsp;·&nbsp; "
+                   + COUNT + "칸 중 하나";
+  go.textContent = "도 전";
+  pips();
+}
+
+function start() {
+  round = 0; marks = []; times = [];
+  slot.innerHTML = "";
+  pad.classList.remove("idle");
+  go.textContent = "포 기";
+  pips();
+  nextRound();
+}
+
+function nextRound() {
+  state = "running";
+  build(이번목표(round));
+  // 첫 프레임이 오기 전에도 회차가 바뀐 게 보이도록 먼저 써 둔다
+  status.innerHTML = "<b>" + (round + 1) + "</b> / " + ROUNDS + " 회"
+                   + " &nbsp;·&nbsp; 남은 시간 <b class='time'>"
+                   + R.limitSec.toFixed(2) + "</b>초";
+  t0 = performance.now();
+  raf = requestAnimationFrame(tick);
+}
+
+function finish(ok, why) {
+  cancelAnimationFrame(raf);
+  state = "done";
+
+  // 정답 자리는 언제나 초록으로 알려 준다.
+  // 잘못 누른 칸에는 이미 붉은 표시가 붙어 있어 둘이 구별된다.
+  const cells = pad.children;
+  if (cells[oddIndex]) cells[oddIndex].classList.add("hit");
+  pad.classList.remove("idle");
+
+  const total = times.reduce((a, b) => a + b, 0);
+  status.innerHTML = ok
+    ? "세 판 합쳐 <b class='time'>" + total.toFixed(2) + "</b>초"
+    : "정답은 표시된 칸";
+
+  slot.innerHTML = verdictHtml(ok,
+    ok ? total.toFixed(2) + " 초" : (why || "실패"), "");
+  go.textContent = "다 시";
+  if (ok) Sound.success(); else Sound.fail();
+}
+
+pad.addEventListener("click", (e) => {
+  if (state !== "running") return;
+  const cell = e.target.closest(".cell");
+  if (!cell) return;
+
+  if (Number(cell.dataset.i) !== oddIndex) {
+    cell.classList.add("miss");
+    marks.push(false); pips();
+    finish(false, "다른 칸");
+    return;
+  }
+
+  cancelAnimationFrame(raf);
+  times.push(elapsed());
+  marks.push(true); pips();
+  Sound.tick(1 + round * 0.12);
+
+  round++;
+  if (round >= ROUNDS) { finish(true); return; }
+  nextRound();
+});
+
+function press() {
+  if (state === "ready") start();
+  else if (state === "running") { marks.push(false); pips(); finish(false, "포기"); }
+  else reset();
+}
+
+go.addEventListener("click", press);
+onPressKey(press);
+reset();
+</script>
+</body>
+</html>
