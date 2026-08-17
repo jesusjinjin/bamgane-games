@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>콩 고르기</title>
-<link rel="stylesheet" href="common.css?v=112">
-<script src="common.js?v=112"></script>
-<script src="sound.js?v=112"></script>
+<link rel="stylesheet" href="common.css?v=154">
+<script src="common.js?v=154"></script>
+<script src="sound.js?v=154"></script>
 <style>
   :root { --accent-1: #14b8a6; --accent-2: #0d9488; }
 
   /* 마당 멍석을 위에서 내려다본 배경. 가운데는 결만 있어 콩이 잘 보인다. */
-  .stage { background: url('assets/oddone/bg.webp') center / cover no-repeat; }
+  .stage { background: url('assets/oddone/bg.webp?v=154') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -49,12 +49,25 @@
           background: center / contain no-repeat;
           filter: drop-shadow(0 2px 3px rgba(20,14,6,.45)); }
   /* 시작 전에는 콩을 덮어 둔다. 미리 훑어볼 수 없게. */
+  /* 헛짚었을 때 판이 짧게 흔들린다. 붉은 표시를 뺐으니
+     "지금 틀렸다" 를 알려 주는 것은 이 흔들림과 소리뿐이다. */
+  .pad.wrong { animation: pad-wrong .26s cubic-bezier(.2,.7,.3,1); }
+  @keyframes pad-wrong {
+    0%   { transform: translate(0, 0); }
+    14%  { transform: translate(-9px, 0); }
+    34%  { transform: translate(7px, 0); }
+    56%  { transform: translate(-5px, 0); }
+    78%  { transform: translate(3px, 0); }
+    100% { transform: translate(0, 0); }
+  }
+
   .pad.idle .cell { background-image: none !important;
                     background-color: rgba(46,40,30,.55);
                     border-radius: 50%; cursor: default; filter: none; }
 
   .cell.hit  { outline: 3px solid var(--ok); outline-offset: 3px; border-radius: 50%; }
-  .cell.miss { outline: 3px solid #e11d48; outline-offset: 3px; border-radius: 50%; }
+  /* 헛짚은 칸에 붉은 원을 그렸었는데 화면이 지저분해져서 뺐다.
+     `miss` 표는 남긴다 — 같은 칸을 또 눌러도 시간이 두 번 깎이지 않게 하는 표시다. */
 
   .status { font-size: 15px; color: var(--text-dim); letter-spacing: .3px;
             text-shadow: 0 2px 8px rgba(0,0,0,.9); }
@@ -71,7 +84,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/oddone.webp" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/oddone.webp?v=154" alt=""></div>
     <div class="titles">
       <h1>콩 고르기</h1>
       <p>Odd One Out</p>
@@ -96,9 +109,9 @@
       <ul>
         <li>딱 한 알만 색이 다릅니다</li>
         <li>5번 연속 · 갈수록 차이가 옅어집니다</li>
-        <li>다른 콩을 누르면 즉시 실패</li>
+        <li>다른 콩을 누르면 1초가 깎입니다</li>
         <li>기회는 한 번뿐입니다</li>
-        <li><b>[성공기준]</b> 매판 3.5초 이내</li>
+        <li><b>[성공기준]</b> 다섯 단계 모두 17.5초 이내</li>
       </ul>
     </aside>
   </div>
@@ -123,7 +136,7 @@ pad.style.gridTemplateColumns = "repeat(" + R.cols + ", 48px)";
 const beanImg = new Image();
 let beanReady = false;
 beanImg.onload = () => { 평균재기(); beanReady = true; reset(); };
-beanImg.src = "assets/oddone/bean.webp";
+beanImg.src = "assets/oddone/bean.webp?v=154";
 
 /* ── 색 차이를 사람 눈 기준으로 재는 자 ──────────────────────────
    회차마다 "이만큼 다르게" 를 ΔE 로 정해 두고, 그 ΔE 가 나오는
@@ -249,6 +262,9 @@ function tintBean(h, s, l) {
   return "url(" + c.toDataURL() + ")";
 }
 
+// 헛짚었을 때 낼 소리. 이 게임에서 파일로 된 소리는 이것 하나다.
+Sound.use({ oops: "assets/_sounds/oddone/oops.mp3?v=154" });
+
 const roundsBox = document.createElement("div");
 roundsBox.className = "rounds";
 status.before(roundsBox);
@@ -264,6 +280,7 @@ function 이번목표(k) {
 
 let state = "ready";     // ready | running | done
 let round = 0;           // 지금 몇 번째
+let 깎인시간 = 0;        // 잘못 골라 깎인 초. 남은 시간에서 뺀다
 let marks = [];          // 회차별 성패
 let times = [];          // 회차별 걸린 시간
 let oddIndex = 0;        // 다른 칸의 자리
@@ -363,30 +380,48 @@ function build(목표, 회차) {
   }
 }
 
-function tick() {
-  const left = Math.max(0, R.limitSec - elapsed());
+/* 판을 짧게 흔든다. 애니메이션을 다시 걸려면 클래스를 뗐다 붙여야 하는데,
+   그냥 붙이면 브라우저가 한 번에 처리해서 아무 일도 안 일어난다.
+   그래서 사이에 레이아웃을 한 번 읽어 강제로 끊어 준다. */
+function 흔들기() {
+  pad.classList.remove("wrong");
+  void pad.offsetWidth;
+  pad.classList.add("wrong");
+}
+
+function 남은시간() { return Math.max(0, R.전체초 - elapsed() - 깎인시간); }
+
+function 안내() {
   status.innerHTML = "<b>" + (round + 1) + "</b> / " + ROUNDS + " 회"
-                   + " &nbsp;·&nbsp; 남은 시간 <b class='time'>" + left.toFixed(2) + "</b>초";
-  if (left <= 0) { marks.push(false); pips(); finish(false, "시간 초과"); return; }
+                   + " &nbsp;·&nbsp; 남은 시간 <b class='time'>"
+                   + 남은시간().toFixed(2) + "</b>초";
+}
+
+function tick() {
+  안내();
+  if (남은시간() <= 0) { finish(false, "시간 초과"); return; }
   raf = requestAnimationFrame(tick);
 }
 
 function reset() {
   cancelAnimationFrame(raf);
   state = "ready";
-  round = 0; marks = []; times = [];
+  round = 0; marks = []; times = []; 깎인시간 = 0;
   slot.innerHTML = "";
   build(이번목표(0), 0);
   pad.classList.add("idle");
-  status.innerHTML = "<b>" + ROUNDS + "</b>번 연속 &nbsp;·&nbsp; 매판 <b>"
-                   + R.limitSec.toFixed(1) + "</b>초 &nbsp;·&nbsp; "
+  status.innerHTML = "<b>" + ROUNDS + "</b>단계 &nbsp;·&nbsp; 모두 <b>"
+                   + R.전체초.toFixed(1) + "</b>초 안에 &nbsp;·&nbsp; "
                    + COUNT + "칸 중 하나";
   go.textContent = "도 전";
   pips();
 }
 
 function start() {
-  round = 0; marks = []; times = [];
+  round = 0; marks = []; times = []; 깎인시간 = 0;
+  t0 = performance.now();
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
   slot.innerHTML = "";
   pad.classList.remove("idle");
   go.textContent = "포 기";
@@ -397,12 +432,8 @@ function start() {
 function nextRound() {
   state = "running";
   build(이번목표(round), round);
-  // 첫 프레임이 오기 전에도 회차가 바뀐 게 보이도록 먼저 써 둔다
-  status.innerHTML = "<b>" + (round + 1) + "</b> / " + ROUNDS + " 회"
-                   + " &nbsp;·&nbsp; 남은 시간 <b class='time'>"
-                   + R.limitSec.toFixed(2) + "</b>초";
-  t0 = performance.now();
-  raf = requestAnimationFrame(tick);
+  // 시계는 판마다 새로 켜지 않는다. 다섯 단계를 하나의 시간으로 치른다.
+  안내();
 }
 
 function finish(ok, why) {
@@ -415,13 +446,14 @@ function finish(ok, why) {
   if (cells[oddIndex]) cells[oddIndex].classList.add("hit");
   pad.classList.remove("idle");
 
-  const total = times.reduce((a, b) => a + b, 0);
+  // 깎인 시간까지 얹어야 실제로 쓴 시간이 된다
+  const 쓴시간 = elapsed() + 깎인시간;
   status.innerHTML = ok
-    ? "세 판 합쳐 <b class='time'>" + total.toFixed(2) + "</b>초"
+    ? "다섯 단계 <b class='time'>" + 쓴시간.toFixed(2) + "</b>초"
     : "정답은 표시된 칸";
 
   slot.innerHTML = verdictHtml(ok,
-    ok ? total.toFixed(2) + " 초" : (why || "실패"), "");
+    ok ? 쓴시간.toFixed(2) + " 초" : (why || "실패"), "");
   go.textContent = "다 시";
   if (ok) Sound.success(); else Sound.fail();
 }
@@ -431,20 +463,28 @@ pad.addEventListener("click", (e) => {
   const cell = e.target.closest(".cell");
   if (!cell) return;
 
+  /* 잘못 골라도 그 자리에서 끝내지 않는다.
+
+     한 번에 죽으면 다섯 단계가 다 무의미해진다 — 1단계에서 헛짚은 사람이나
+     5단계까지 간 사람이나 결과가 같다. 대신 시간을 1초 깎고 계속 찾게 한다.
+     헛짚은 칸은 붉게 남겨 두고 다시 눌러도 또 깎이지 않는다. */
   if (Number(cell.dataset.i) !== oddIndex) {
+    if (cell.classList.contains("miss")) return;   // 이미 헛짚은 칸
     cell.classList.add("miss");
-    marks.push(false); pips();
-    finish(false, "다른 칸");
+    깎인시간 += R.깎임;
+    if (!Sound.play("oops")) Sound.thud(0.34);
+    흔들기();
+    안내();
+    if (남은시간() <= 0) finish(false, "시간 초과");
     return;
   }
 
-  cancelAnimationFrame(raf);
   times.push(elapsed());
   marks.push(true); pips();
   Sound.tick(1 + round * 0.12);
 
   round++;
-  if (round >= ROUNDS) { finish(true); return; }
+  if (round >= ROUNDS) { cancelAnimationFrame(raf); finish(true); return; }
   nextRound();
 });
 

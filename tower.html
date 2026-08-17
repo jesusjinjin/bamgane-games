@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="cache-control" content="no-cache">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
+<title>삼색떡 해체</title>
+<link rel="stylesheet" href="common.css?v=154">
+<script src="common.js?v=154"></script>
+<script src="sound.js?v=154"></script>
+<style>
+  :root { --accent-1: #34d399; --accent-2: #059669; }
+
+  .stage { background: url('assets/tower/bg.webp?v=154') center / cover no-repeat; }
+  .topbar { background: rgba(22, 22, 40, .42); }
+  .stage::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(180deg, rgba(20,16,14,.22) 0%, rgba(20,16,14,.03) 26%,
+                                        rgba(20,16,14,.22) 62%, rgba(20,16,14,.52) 100%);
+  }
+  .body { z-index: 1; }
+
+  .board { width: 100%; display: grid; justify-items: center;
+           grid-template-rows: var(--play-h) 30px auto; align-content: center;
+           position: relative; }
+  /* 탑과 색 버튼이 같은 프레임 안에 들어간다.
+     버튼을 프레임 밖에 두면 OBS 창 캡처에 조작부가 안 잡힌다. */
+  .towerslot { position: relative; order: 1;
+               width: var(--play-w); height: var(--play-h); }
+  .status   { order: 2; align-self: center; }
+  .controls { text-align: center; order: 3; }
+  .slot { position: absolute; left: 50%; top: calc(var(--play-h) / 2);
+          transform: translate(-50%, -50%); z-index: 4;
+          display: grid; place-items: center; pointer-events: none; }
+
+  canvas { display: block; position: absolute; left: 0; top: 0; }
+
+  /* 색 버튼 세 개. 프레임 아래쪽에 나란히. */
+  .picks { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+           display: flex; gap: 18px; z-index: 3; }
+  .pick {
+    width: 108px; height: 62px; border-radius: 14px; cursor: pointer;
+    border: 2px solid rgba(255,255,255,.5);
+    display: grid; place-items: center; gap: 0;
+    box-shadow: 0 8px 18px -8px rgba(0,0,0,.8);
+    transition: transform .1s, filter .1s;
+  }
+  .pick:hover { transform: translateY(-2px); filter: brightness(1.12); }
+  .pick:active { transform: translateY(1px); }
+  /* 자판 글자가 버튼의 전부다. 멀리서도 읽히게 크고 두껍게. */
+  .pick .key { font-size: 34px; font-weight: 900; line-height: 1;
+               color: #fff; letter-spacing: .02em;
+               text-shadow: 0 2px 4px rgba(0,0,0,.55); }
+  .towerslot.idle .picks { opacity: .45; pointer-events: none; }
+
+  .status { font-size: 15px; color: var(--text-dim); letter-spacing: .3px;
+            text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+  .status b { color: #fff; font-size: 17px; }
+  .status .time { font-variant-numeric: tabular-nums; }
+  .verdict .detail { text-shadow: 0 3px 10px rgba(0,0,0,.9); }
+  .verdict .sub { display: none; }
+  .verdict .mark { background: rgba(16,20,26,.72); }
+  .verdict.ok .mark { background: rgba(16,40,26,.72); border-color: #4ade80; }
+</style>
+</head>
+<body>
+<div id="fit"><div class="stage">
+
+  <div class="topbar">
+    <a class="back" href="index.html" title="목록으로">←</a>
+    <div class="tile sm pic"><img src="assets/_icons/tower.webp?v=154" alt=""></div>
+    <div class="titles">
+      <h1>삼색떡 해체</h1>
+      <p>Color Stack</p>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="play">
+      <div class="board">
+        <div class="towerslot playslot idle" id="towerslot">
+          <canvas id="cv" width="768" height="432"></canvas>
+          <div class="picks" id="picks"></div>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="slot" id="slot"></div>
+        <div class="controls">
+          <button class="btn" id="go">도 전</button>
+          <div class="hint">A · S · D 키 또는 클릭</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rules card">
+      <h2>규칙</h2>
+      <ul>
+        <li>맨 아래 떡과 같은 색을 누르세요</li>
+        <li>다섯 층까지만 보입니다</li>
+        <li>틀리면 떡이 잠깐 굳습니다</li>
+        <li>굳는 동안 키가 안 먹습니다</li>
+        <li>틀릴 때마다 시간이 1초 깎입니다</li>
+        <li>기회는 한 번뿐입니다</li>
+        <li><b>[성공기준]</b> 40층 전부 헐기</li>
+      </ul>
+    </aside>
+  </div>
+
+</div></div>
+
+<script>
+"use strict";
+
+const R = RULES.tower;
+
+Sound.use({
+  success: "assets/_sounds/common/success.mp3?v=154",
+  fail:    "assets/_sounds/common/fail.mp3?v=154",
+  whine:   "assets/_sounds/tower/whine.mp3?v=154",
+  bite:    "assets/_sounds/tower/bite.mp3?v=154",
+});
+const cv     = document.getElementById("cv");
+const ctx    = cv.getContext("2d");
+const status = document.getElementById("status");
+const slot   = document.getElementById("slot");
+const go     = document.getElementById("go");
+const picks  = document.getElementById("picks");
+const 판     = document.getElementById("towerslot");
+
+const W = cv.width, H = cv.height;
+
+/* 떡 그림은 무채색 한 장만 받고 색은 코드가 곱해서 입힌다.
+   색칠된 그림을 세 장 받으면 세 색의 밝기·채도를 맞출 수가 없다.
+
+   전에는 색마다 동그라미·세모·별을 얹었다. 색약인 시청자를 위한 것이었는데
+   화면이 번잡해져서 뺐다. 지금은 색으로만 가른다. */
+const 색떡 = [
+  { 이름: "빨강", 색: "#e04b3c", 키: "A", 자판: "KeyA" },
+  { 이름: "초록", 색: "#3da35d", 키: "S", 자판: "KeyS" },
+  { 이름: "파랑", 색: "#3f7fd0", 키: "D", 자판: "KeyD" },
+];
+
+
+const 그림 = {};
+for (const 쌍 of [["떡", "assets/tower/rice-cake.webp?v=154"]]) {
+  const im = new Image();
+  im.onload = () => draw();
+  im.src = 쌍[1];
+  그림[쌍[0]] = im;
+}
+const 왔나 = (k) => 그림[k] && 그림[k].complete && 그림[k].naturalWidth > 0;
+
+/* 탑이 놓이는 자리.
+
+   층 높이를 숫자로 박아 두면 안 된다. 14층 × 27px 로 잡았더니 탑 꼭대기가
+   프레임 위로 41px 넘쳤다 — 조작 프레임을 벗어나면 OBS 창 캡처에서 잘린다.
+
+   그래서 거꾸로 잡는다. 쓸 수 있는 세로 길이를 먼저 정하고
+   층수로 나눠 한 층 높이를 얻는다. 층수를 바꿔도 저절로 맞는다. */
+const 떡폭 = 168;
+const 바닥 = H - 96;                    // 아래쪽은 버튼 자리로 비워 둔다
+const 천장 = 18;                        // 위쪽 여백
+const 층간 = 1;
+/* 나누는 값이 R.layers 가 아니라 R.보임 이다.
+
+   한 번에 다섯 층만 보이므로 탑 높이는 층수와 상관없이 늘 같다.
+   그래서 층수를 20 으로 늘려도 떡이 납작해지지 않는다. */
+const 층높이 = Math.floor((바닥 - 천장) / R.보임);      // 칸 하나가 차지하는 높이
+const 떡높이 = 층높이 - 층간;
+const 가운데 = W / 2;
+
+/* 무채색 떡에 색을 입힌다. 콩 고르기에서 쓴 방식과 같다.
+
+   곱하기로 얹으면 원본보다 밝아지지 않지만, 원본이 거의 흰색이라
+   빨강·초록·파랑이 그대로 나온다. 같은 색은 한 번만 만들어 두고 돌려 쓴다. */
+const 물든떡 = {};
+function 물들이기(색) {
+  if (물든떡[색]) return 물든떡[색];
+  if (!왔나("떡")) return null;
+  const c = document.createElement("canvas");
+  c.width = 그림["떡"].naturalWidth;
+  c.height = 그림["떡"].naturalHeight;
+  const x = c.getContext("2d");
+  x.drawImage(그림["떡"], 0, 0);
+  x.globalCompositeOperation = "multiply";
+  x.fillStyle = 색;
+  x.fillRect(0, 0, c.width, c.height);
+  x.globalCompositeOperation = "destination-in";   // 떡 모양으로 다시 오려낸다
+  x.drawImage(그림["떡"], 0, 0);
+  물든떡[색] = c;
+  return c;
+}
+
+let state = "ready";      // ready | running | done
+let 탑 = [];              // 아래에서 위로. [0] 이 맨 아래
+let t0 = 0, raf = 0;
+let 흔들 = 0;             // 한 층 헐 때의 짧은 반동
+let 나타남 = 1;           // 새로 올라온 맨 윗 떡이 배어 나오는 정도 (0→1)
+let 벌끝 = 0;             // 틀려서 굳어 있는 끝 시각. 0 이면 안 굳었다
+let 깎인시간 = 0;         // 틀린 벌로 깎아 낸 초. 남은 시간에서 뺀다
+
+function elapsed() { return (performance.now() - t0) / 1000; }
+
+/* 색을 뽑되 같은 색이 너무 이어지지 않게 한다.
+
+   연속으로 몰리면 손이 한 자리에 굳어서 오히려 쉬워진다.
+   maxRun 을 넘기려 하면 다른 색으로 바꾼다. */
+function 탑쌓기() {
+  탑 = [];
+  let 직전 = -1, 연속 = 0;
+  for (let i = 0; i < R.layers; i++) {
+    let k = Math.floor(Math.random() * 색떡.length);
+    if (k === 직전 && 연속 >= R.maxRun - 1) {
+      k = (k + 1 + Math.floor(Math.random() * (색떡.length - 1))) % 색떡.length;
+    }
+    연속 = (k === 직전) ? 연속 + 1 : 0;
+    직전 = k;
+    탑.push(k);
+  }
+}
+
+/* 떡에 새겨진 웃는 얼굴 자리. 그림(504 × 186) 에서 잰 값을 비율로 적어 둔다.
+   그림 크기가 바뀌어도 이 비율은 그대로다. */
+const 얼굴 = { 눈왼: 210 / 504, 눈오른: 294 / 504, 눈높이: 88 / 186,
+               눈반지름: 19 / 504, 입높이: 120 / 186 };
+
+/* 웃는 얼굴을 찡그린 얼굴로 덮어 그린다.
+
+   얼굴은 떡 그림에 새겨져 있어서 지울 수가 없다. 그래서 몸 색으로 눈과 입을
+   덮은 다음 그 위에 다시 그린다. 덮을 색은 물들인 떡에서 직접 뽑는다 —
+   색깔마다 다르므로 짐작해서 칠하면 티가 난다. */
+const 몸색 = {};
+function 떡몸색(색) {
+  if (몸색[색]) return 몸색[색];
+  const c = 물들이기(색);
+  if (!c) return 색;
+  const d = c.getContext("2d").getImageData(
+    Math.round(c.width * 0.5), Math.round(c.height * 0.22), 1, 1).data;
+  몸색[색] = "rgb(" + d[0] + "," + d[1] + "," + d[2] + ")";
+  return 몸색[색];
+}
+
+function 찡그리기(색, x, y) {
+  const 눈y = y + 떡높이 * 얼굴.눈높이;
+  const r = 떡폭 * 얼굴.눈반지름;
+  const 입y = y + 떡높이 * 얼굴.입높이;
+  const 몸 = 떡몸색(색);
+
+  ctx.save();
+  // ① 새겨진 눈과 입을 몸 색으로 덮는다
+  ctx.fillStyle = 몸;
+  for (const 비 of [얼굴.눈왼, 얼굴.눈오른]) {
+    ctx.beginPath();
+    ctx.ellipse(x + 떡폭 * 비, 눈y, r * 1.5, r * 1.5, 0, 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.ellipse(x + 떡폭 / 2, 입y, r * 1.6, r * 1.1, 0, 0, 6.2832);
+  ctx.fill();
+
+  // ② 찡그린 눈. 안쪽이 내려간 > < 모양
+  ctx.strokeStyle = "rgba(58,48,42,.95)";
+  ctx.lineWidth = Math.max(2, r * 0.42);
+  ctx.lineCap = "round";
+  const 안쪽 = [1, -1];
+  [얼굴.눈왼, 얼굴.눈오른].forEach((비, k) => {
+    const cx = x + 떡폭 * 비, 향 = 안쪽[k];
+    ctx.beginPath();
+    ctx.moveTo(cx - 향 * r * 0.9, 눈y - r * 0.6);
+    ctx.lineTo(cx + 향 * r * 0.9, 눈y);
+    ctx.lineTo(cx - 향 * r * 0.9, 눈y + r * 0.6);
+    ctx.stroke();
+  });
+
+  // ③ 아래로 휜 입
+  ctx.beginPath();
+  ctx.arc(x + 떡폭 / 2, 입y + r * 0.9, r * 0.95, Math.PI * 1.15, Math.PI * 1.85);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  /* 남은 층을 다 그리지 않는다. 아래에서부터 R.보임 층까지만 보여 준다.
+
+     다 보이면 미리 손가락 순서를 외워 두고 눈 감고도 칠 수 있다.
+     다섯 층만 보이면 헐 때마다 새 떡이 올라오므로 계속 봐야 한다. */
+  const 보임 = Math.min(탑.length, R.보임);
+  for (let i = 0; i < 보임; i++) {
+    const 종 = 색떡[탑[i]];
+    const y = 바닥 - i * 층높이 - 떡높이;
+    // 맨 아래 한 층만 살짝 밀려 나와 있다 — 지금 지울 것이 어느 것인지 보이게
+    let 밀림 = (i === 0) ? 흔들 : 0;
+    // 틀린 직후에는 맨 아래 떡이 부르르 떤다
+    if (i === 0 && 벌끝 > 0) 밀림 += Math.sin(performance.now() / 15) * 4.5;
+    const x = 가운데 - 떡폭 / 2 + 밀림;
+
+    // 맨 위는 방금 올라온 자리다. 짧게 배어 나오게 해서 눈이 따라가게 한다.
+    const 맨위 = (i === 보임 - 1 && 탑.length > R.보임);
+    ctx.save();
+    if (맨위 && 나타남 < 1) ctx.globalAlpha = 0.25 + 0.75 * 나타남;
+
+    const 물든 = 물들이기(종.색);
+    if (물든) {
+      ctx.drawImage(물든, x, y, 떡폭, 떡높이);
+    } else {
+      ctx.beginPath();
+      const r = 6;
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + 떡폭, y, x + 떡폭, y + 떡높이, r);
+      ctx.arcTo(x + 떡폭, y + 떡높이, x, y + 떡높이, r);
+      ctx.arcTo(x, y + 떡높이, x, y, r);
+      ctx.arcTo(x, y, x + 떡폭, y, r);
+      ctx.closePath();
+      ctx.fillStyle = 종.색;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(60,40,30,.45)"; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    if (i === 0 && 벌끝 > 0) 찡그리기(종.색, x, y);
+    ctx.restore();
+  }
+
+  // 맨 아래 떡 아래에 옅은 밑줄 — 여기가 지금 볼 자리라는 표시
+  if (state === "running" && 탑.length) {
+    ctx.beginPath();
+    ctx.moveTo(가운데 - 떡폭 / 2 - 14, 바닥 + 5);
+    ctx.lineTo(가운데 + 떡폭 / 2 + 14, 바닥 + 5);
+    ctx.strokeStyle = "rgba(255,255,255,.55)";
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([7, 6]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function 버튼만들기() {
+  picks.innerHTML = "";
+  색떡.forEach((종, i) => {
+    const b = document.createElement("button");
+    b.className = "pick";
+    b.style.background = "linear-gradient(150deg, " + 종.색 + ", "
+                       + 종.색 + "cc)";
+    b.dataset.i = String(i);
+    b.title = 종.이름;
+    b.innerHTML = '<span class="key">' + 종.키 + '</span>';
+    picks.appendChild(b);
+  });
+}
+
+function 안내() {
+  const 남은 = Math.max(0, R.limitSec - elapsed() - 깎인시간);
+  status.innerHTML = "남은 층 <b>" + 탑.length + "</b>"
+                   + " &nbsp;·&nbsp; 남은 시간 <b class='time'>"
+                   + 남은.toFixed(2) + "</b>초";
+}
+
+function tick() {
+  if (state !== "running") return;
+  if (elapsed() + 깎인시간 >= R.limitSec) { finish(false, "시간 초과"); return; }
+  let 다시그려 = false;
+  if (흔들 !== 0) { 흔들 *= 0.82; if (Math.abs(흔들) < 0.4) 흔들 = 0; 다시그려 = true; }
+  if (나타남 < 1) { 나타남 = Math.min(1, 나타남 + 0.14); 다시그려 = true; }
+  if (벌끝 > 0) {
+    // 떠는 동안은 매 프레임 그려야 떨림이 보인다
+    if (performance.now() >= 벌끝) 벌끝 = 0;
+    다시그려 = true;
+  }
+  if (다시그려) draw();
+  안내();
+  raf = requestAnimationFrame(tick);
+}
+
+function reset() {
+  cancelAnimationFrame(raf);
+  state = "ready";
+  탑쌓기();
+  흔들 = 0;
+  나타남 = 1;
+  벌끝 = 0;
+  깎인시간 = 0;
+  slot.innerHTML = "";
+  판.classList.add("idle");
+  status.innerHTML = "<b>" + R.layers + "</b>층 &nbsp;·&nbsp; <b>"
+                   + R.limitSec.toFixed(0) + "</b>초 안에 전부";
+  go.textContent = "도 전";
+  draw();
+}
+
+function start() {
+  state = "running";
+  탑쌓기();
+  흔들 = 0;
+  나타남 = 1;
+  벌끝 = 0;
+  깎인시간 = 0;
+  slot.innerHTML = "";
+  판.classList.remove("idle");
+  go.textContent = "포 기";
+  t0 = performance.now();
+  안내();
+  draw();
+  raf = requestAnimationFrame(tick);
+}
+
+function 고르기(i) {
+  if (state !== "running") return;
+  // 굳어 있는 동안은 아무 키도 안 먹는다.
+  // 남은 시각으로 재야 한다 — tick 이 늦게 돌아도 제때 풀린다.
+  if (performance.now() < 벌끝) return;
+
+  /* 틀려도 그 자리에서 끝내지 않는다.
+
+     한 번에 죽으면 20층이 다 무의미해진다 — 두 층에서 틀린 사람이나
+     열아홉 층에서 틀린 사람이나 결과가 똑같다. 대신 떡이 찡그리며 떨고
+     그동안 손이 묶인다. 시계는 계속 가므로 벌은 시간으로 치른다. */
+  if (i !== 탑[0]) {
+    벌끝 = performance.now() + R.벌초 * 1000;
+    깎인시간 += R.깎임;               // 남은 시간에서 바로 덜어 낸다
+    // 떡이 찡찡대는 소리. 굳는 시간(0.45초)보다 짧게 끊어 뒀으므로
+    // 소리가 먼저 그치고 손이 풀린다. 파일이 아직이면 코드 소리로 대신한다.
+    if (!Sound.play("whine")) Sound.thud(0.34);
+    draw();
+    안내();
+    return;
+  }
+
+  탑.shift();
+  흔들 = -9;
+  나타남 = 0;
+  // 떡을 한 입 베어 무는 소리. 파일이 아직이면 코드 소리로 대신한다.
+  if (!Sound.play("bite")) { Sound.thud(0.3); Sound.crackle(1.0); }
+  draw();
+
+  if (탑.length === 0) { finish(true); return; }
+  안내();
+}
+
+function finish(ok, why) {
+  cancelAnimationFrame(raf);
+  state = "done";
+  판.classList.add("idle");
+  흔들 = 0;
+
+  const 걸린 = Math.min(elapsed(), R.limitSec);
+  status.innerHTML = ok
+    ? "<b class='time'>" + 걸린.toFixed(2) + "</b>초에 전부 헐었습니다"
+    : "남은 층 <b>" + 탑.length + "</b>";
+
+  slot.innerHTML = verdictHtml(ok,
+    ok ? 걸린.toFixed(2) + " 초" : (why || "실패"), "");
+  go.textContent = "다 시";
+  setTimeout(() => { if (ok) Sound.success(); else Sound.fail(); }, 120);
+  draw();
+}
+
+picks.addEventListener("click", (e) => {
+  const b = e.target.closest(".pick");
+  if (b) 고르기(Number(b.dataset.i));
+});
+
+addEventListener("keydown", (e) => {
+  if (state !== "running") return;
+  // e.key 가 아니라 e.code 로 본다. 한글 자판이 켜져 있으면
+  // e.key 는 "ㅁ"·"ㄴ"·"ㅇ" 이 되어 안 잡힌다.
+  const i = 색떡.findIndex((종) => 종.자판 === e.code);
+  if (i >= 0) { e.preventDefault(); 고르기(i); }
+});
+
+function press() {
+  if (state === "ready") start();
+  // 진행 중에는 색으로만 고른다. 이 버튼은 포기 자리다 —
+  // 다른 게임과 같게 두어야 "도전 → 포기 → 다시" 흐름이 안 어긋난다.
+  else if (state === "running") finish(false, "포기");
+  else reset();
+}
+
+go.addEventListener("click", (e) => { e.preventDefault(); press(); });
+onPressKey(press);
+
+버튼만들기();
+reset();
+</script>
+</body>
+</html>

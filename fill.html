@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="cache-control" content="no-cache">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
+<title>떡 담기</title>
+<link rel="stylesheet" href="common.css?v=154">
+<script src="common.js?v=154"></script>
+<script src="sound.js?v=154"></script>
+<style>
+  :root { --accent-1: #fb7185; --accent-2: #e11d48; }
+
+  .stage { background: url('assets/fill/bg.webp?v=154') center / cover no-repeat; }
+  .topbar { background: rgba(22, 22, 40, .42); }
+  .stage::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(180deg, rgba(24,18,16,.22) 0%, rgba(24,18,16,.03) 26%,
+                                        rgba(24,18,16,.22) 62%, rgba(24,18,16,.52) 100%);
+  }
+  .body { z-index: 1; }
+
+  /* 조작 프레임(432) + 안내(30) + 버튼. 판정은 프레임 위에 겹친다. */
+  .board { width: 100%; display: grid; justify-items: center;
+           grid-template-rows: var(--play-h) 30px auto; align-content: center;
+           position: relative; }
+  .basketslot { display: grid; place-items: center; order: 1;
+                width: var(--play-w); height: var(--play-h); }
+  .status   { order: 2; align-self: center; }
+  .controls { text-align: center; order: 3; }
+  .slot { position: absolute; left: 50%; top: calc(var(--play-h) / 2);
+          transform: translate(-50%, -50%); z-index: 4;
+          display: grid; place-items: center; pointer-events: none; }
+
+  canvas { display: block; }
+
+  /* 한 개 담길 때마다 화면이 아주 살짝 눌린다.
+     연타 게임이라 한 번이 크면 화면이 내내 요동친다. 폭을 작게 잡았다. */
+  .stage.tap { animation: stage-tap .09s ease-out; }
+  @keyframes stage-tap {
+    0%   { transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1)) translate(0, 0); }
+    50%  { transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1)) translate(0, 1.6px); }
+    100% { transform: rotate(var(--rot, 0deg)) scale(var(--fit, 1)) translate(0, 0); }
+  }
+
+  .status { font-size: 15px; color: var(--text-dim); letter-spacing: .3px;
+            text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+  .status b { color: #fff; font-size: 17px; }
+  .status .time, .status .num { font-variant-numeric: tabular-nums; }
+  /* 목표 개수는 판 내내 떠 있어야 한다. 이걸 놓치면 게임이 성립하지 않는다. */
+  .status .goal { color: #fde68a; font-size: 19px; }
+  .verdict .detail { text-shadow: 0 3px 10px rgba(0,0,0,.9); }
+  .verdict .sub { display: none; }
+  .verdict .mark { background: rgba(16,20,26,.72); }
+  .verdict.ok .mark { background: rgba(16,40,26,.72); border-color: #4ade80; }
+</style>
+</head>
+<body>
+<div id="fit"><div class="stage">
+
+  <div class="topbar">
+    <a class="back" href="index.html" title="목록으로">←</a>
+    <div class="tile sm pic"><img src="assets/_icons/fill.webp?v=154" alt=""></div>
+    <div class="titles">
+      <h1>떡 담기</h1>
+      <p>Fill the Basket</p>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="play">
+      <div class="board">
+        <div class="basketslot playslot"><canvas id="cv" width="768" height="432"></canvas></div>
+        <div class="status" id="status"></div>
+        <div class="slot" id="slot"></div>
+        <div class="controls">
+          <button class="btn" id="go">도 전</button>
+          <div class="hint">스페이스바 연타 &nbsp;·&nbsp; 빛깔 수만큼 셉니다</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rules card">
+      <h2>규칙</h2>
+      <ul>
+        <li>연타해서 떡을 담으세요</li>
+        <li>흰떡 1개, 2색떡 2개, 3색떡 3개 카운트됩니다</li>
+        <li>목표 개수는 매판 달라집니다</li>
+        <li>10개까지만 담은 떡 갯수가 보입니다</li>
+        <li>시간이 끝나야 결과를 압니다</li>
+        <li>기회는 한 번뿐입니다</li>
+        <li><b>[성공기준]</b> 목표와 정확히 일치</li>
+      </ul>
+    </aside>
+  </div>
+
+</div></div>
+
+<script>
+"use strict";
+
+const R = RULES.fill;
+
+Sound.use({
+  success: "assets/_sounds/common/success.mp3?v=154",
+  fail:    "assets/_sounds/common/fail.mp3?v=154",
+});
+const cv     = document.getElementById("cv");
+const ctx    = cv.getContext("2d");
+const status = document.getElementById("status");
+const slot   = document.getElementById("slot");
+const go     = document.getElementById("go");
+
+/* 캔버스 알맹이를 두 배로 잡는다.
+
+   화면에서는 이 판이 1.5 배 넘게 늘어나 보인다. 알맹이가 768 × 432 뿐이면
+   그 배율만큼 픽셀이 그대로 늘어나 떡 가장자리가 계단처럼 깨진다.
+   알맹이만 두 배로 키우고 좌표계는 그대로 두면, 게임 코드는 손대지 않고
+   그림만 촘촘해진다. */
+const 그림배 = 2;
+const W = cv.width, H = cv.height;
+cv.width = W * 그림배;
+cv.height = H * 그림배;
+cv.style.width = W + "px";
+cv.style.height = H + "px";
+ctx.setTransform(그림배, 0, 0, 그림배, 0, 0);
+
+/* 소쿠리 한 장 위에 떡을 얹는다.
+
+   처음에는 앞 테두리를 한 겹 더 덮어 떡을 소쿠리 "안" 에 넣으려 했는데,
+   떡이 쌓이는 자리가 앞 테두리보다 위라서 가려지는 데가 없었다.
+   테두리만 두 겹으로 보여서 걷어냈다. */
+const 그림 = {};
+for (const 쌍 of [["뒤", "assets/fill/basket.webp?v=154"],
+                  ["떡", "assets/fill/rice-ball.webp?v=154"]]) {
+  const im = new Image();
+  im.onload = () => draw();
+  im.src = 쌍[1];
+  그림[쌍[0]] = im;
+}
+const 왔나 = (k) => 그림[k].complete && 그림[k].naturalWidth > 0;
+
+// 소쿠리가 놓이는 자리. 프레임 아래쪽에 앉힌다.
+const BASKET_W = 360, BASKET_H = 200;
+const BASKET_X = (W - BASKET_W) / 2;
+const BASKET_Y = H - BASKET_H - 40;
+
+/* 떡 한 개 크기와, 소쿠리 안에서 떡이 쌓이는 구역.
+
+   이 값은 짐작이 아니라 소쿠리 그림을 실제로 재서 잡았다.
+   그림(720×400)의 알파를 훑어 보니
+
+     뒤 소쿠리   가운데 줄에서 y 56~63 만 칠해져 있다 (먼 쪽 테두리)
+     앞 테두리   가운데 줄에서 y 264~304 가 칠해져 있다 (가까운 쪽 벽)
+
+   즉 그릇 속은 그 사이인 y 64~264 다. 절반으로 줄여 그리므로
+   화면에서는 BASKET_Y + 32 ~ BASKET_Y + 132 이 된다.
+
+   처음에는 소쿠리 아래쪽 끝을 기준으로 잡았다가 떡이 앞벽 아래로
+   흘러나왔다. 그릇 바깥에 떡이 매달린 꼴이었다. */
+const 떡크기 = 34;
+const 담는칸 = { 좌: BASKET_X + BASKET_W * 0.125,
+                 우: BASKET_X + BASKET_W * 0.875,
+                 아래: BASKET_Y + BASKET_H * 0.575,  // 소쿠리 앞 테 위로
+                 천장: BASKET_Y + BASKET_H * 0.17 };  // 뒤 테두리 바로 아래
+
+/* 떡 세 가지. 빛깔 수가 곧 개수다.
+
+     흰떡        흰빛 하나        1개
+     두 빛깔 떡  흰빛 + 분홍      2개
+     세 빛깔 떡  흰빛 + 분홍 + 쑥  3개
+
+   이게 이 게임의 뒤틀기다. 연타 횟수를 세는 게 아니라 **값을 더해야** 한다.
+   같은 스무 번을 눌러도 20이 될 수도 있고 60이 될 수도 있어서,
+   손의 박자만으로는 맞힐 수 없다.
+
+   떡 그림은 흰 것 한 장뿐이라 빛깔은 코드가 입힌다. 아래쪽부터 띠로
+   나눠 칠하는데, 이래야 시루떡처럼 켜켜이 쌓인 것으로 보인다. */
+/* 값이 몇이냐를 **덩이 개수로** 보여 준다.
+
+   처음에는 떡 한 개를 켜켜이 나눠 칠했는데, 34px 로 줄어드니 띠가
+   눌려서 두 빛깔인지 세 빛깔인지 구별이 안 됐다. 값이 안 읽히면
+   더할 수가 없으니 게임이 성립하지 않는다.
+
+   그래서 아예 개수로 바꿨다. 두 개짜리는 떡 둘이 반씩 겹쳐 있고,
+   세 개짜리는 셋이 세모로 모여 있다. 세어 보면 바로 값이다. */
+const 떡종류 = [
+  { 이름: "흰떡", 값: 1, 확률: 75,
+    알: [{ x: 0, y: 0, 색: null }] },
+  { 이름: "두 빛깔 떡", 값: 2, 확률: 17,
+    알: [{ x: -0.21, y:  0.05, 색: null },
+         { x:  0.21, y: -0.05, 색: "#ef9bb0" }] },
+  { 이름: "세 빛깔 떡", 값: 3, 확률: 8,
+    알: [{ x:  0,    y: -0.17, 색: null },
+         { x: -0.24, y:  0.15, 색: "#ef9bb0" },
+         { x:  0.24, y:  0.15, 색: "#8aa96c" }] },
+];
+
+/* 빛깔 떡은 드물게 나온다 (85 · 10 · 5).
+
+   셋이 고르게 나오면 한 번 누를 때 평균 2가 되어, 스무 번만 눌러도
+   목표에 닿는다. 그러면 연타 게임이 아니라 산수 게임이 된다.
+
+   드물게 섞이면 대부분은 한 개씩 세다가 가끔 툭 튀어 오른다.
+   손의 박자로 세던 감이 그 한 번에 흐트러지는 것이 이 게임의 함정이다.
+   한 번 누를 때 평균 1.2 이므로 목표 40이면 서른세 번쯤 눌러야 한다. */
+const 확률합 = 떡종류.reduce((a, t) => a + t.확률, 0);
+/* 한 판에 나올 떡을 미리 정해 놓고 섞어서 하나씩 꺼내 쓴다.
+
+   전에는 누를 때마다 따로 확률을 굴렸다. 그러면 판마다 편차가 너무 컸다.
+   85·10·5 라도 서른 몇 번 굴리는 동안 색떡이 하나도 안 나오는 판이 생기고,
+   그런 판은 목표를 채우는 데 남보다 열 번 가까이 더 눌러야 한다.
+   실력이 아니라 운으로 갈리는 것이다.
+
+   그래서 주머니에 담아 두고 뽑는다. 한 판에 나올 색떡 수가 미리 정해지므로
+   판끼리 필요한 연타 수가 비슷해진다. 섞어 두었으니 언제 나올지는 여전히 모른다. */
+const 평균값 = 떡종류.reduce((a, t) => a + t.확률 * t.값, 0) / 확률합;
+let 주머니 = [];
+
+function 주머니채우기() {
+  // 목표를 채우는 데 필요한 만큼만 담는다
+  const 칸수 = Math.max(8, Math.ceil((목표 || R.maxTarget) / 평균값));
+  const 몫 = 떡종류.map((t) => 칸수 * t.확률 / 확률합);
+  const 수 = 몫.map(Math.floor);
+  // 내림하고 남은 자리는 소수점이 큰 쪽부터 채운다 (안 그러면 칸수가 모자란다)
+  let 남 = 칸수 - 수.reduce((a, b) => a + b, 0);
+  const 차례 = 몫.map((v, i) => [v - Math.floor(v), i]).sort((a, b) => b[0] - a[0]);
+  for (let i = 0; 남 > 0; i++, 남--) 수[차례[i % 차례.length][1]]++;
+
+  const 것 = [];
+  수.forEach((n, k) => { for (let i = 0; i < n; i++) 것.push(k); });
+  for (let i = 것.length - 1; i > 0; i--) {          // 섞기
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = 것[i]; 것[i] = 것[j]; 것[j] = t;
+  }
+  주머니 = 것;
+}
+
+function 떡뽑기() {
+  const 남은 = 목표 - 담은수;
+  if (!주머니.length) 주머니채우기();
+  /* 남은 개수를 넘겨 버리는 떡은 건너뛴다. 목표 45 에 44 개를 담아 둔 판에서
+     두 빛깔 떡이 나오면 46 이 되어 손쓸 수가 없다. */
+  const i = 주머니.findIndex((k) => 떡종류[k].값 <= 남은);
+  if (i < 0) return 0;                                // 남은 게 없으면 흰떡
+  return 주머니.splice(i, 1)[0];
+}
+
+/* 빛깔을 입힌 떡 한 알을 미리 만들어 둔다. 색이 null 이면 흰떡 그대로다.
+   같은 색은 한 번만 만들고 돌려 쓴다. */
+const 물든알 = {};
+function 알그림(색) {
+  if (!왔나("떡")) return null;
+  if (!색) return 그림["떡"];
+  if (물든알[색]) return 물든알[색];
+  const 원본 = 그림["떡"];
+  const c = document.createElement("canvas");
+  c.width = 원본.naturalWidth; c.height = 원본.naturalHeight;
+  const x = c.getContext("2d");
+  x.drawImage(원본, 0, 0);
+  x.globalCompositeOperation = "multiply";
+  x.fillStyle = 색;
+  x.fillRect(0, 0, c.width, c.height);
+  x.globalCompositeOperation = "destination-in";   // 떡 모양으로 다시 오려낸다
+  x.drawImage(원본, 0, 0);
+  물든알[색] = c;
+  return c;
+}
+
+/* 프레임 위쪽에 뜨는 마법진. 여기서 떡이 떨어진다.
+
+   납작한 타원으로 그린다 — 바닥에 누운 원을 비스듬히 본 모양이다.
+   다만 참고 그림과 위아래가 뒤집혀 있다. 그림은 내려다본 것이고
+   이건 **머리 위에 떠 있는 것을 올려다본** 것이라, 가까운 쪽 호가
+   위로 오고 빛무리도 위쪽에 걸린다. 그래야 떡이 아래로 쏟아진다. */
+const 마법진 = {
+  x: W / 2,
+  y: 96,
+  rx: 168,
+  ry: 168 * 0.30,          // 납작하게 눕힌 정도
+};
+
+let state = "ready";      // ready | running | done
+let 목표 = 0;
+let 담은수 = 0;
+let t0 = 0, raf = 0;
+let 자리 = [];            // 떡이 놓인 자리. 한 번 정하면 안 움직인다
+let 떨어진칸 = 0;         // 소쿠리에 놓인 덩이 수 (점수와 다르다)
+let 떨어지는것 = [];      // 아직 공중에 있는 떡
+let 반짝 = [];            // 마법진에서 흘러내리는 빛 알갱이
+let 시계 = 0;             // 마법진이 도는 데 쓰는 시간 (초)
+
+const 낙하시간 = 0.42;    // 마법진에서 소쿠리까지 걸리는 시간
+
+function elapsed() { return (performance.now() - t0) / 1000; }
+
+/* 떡이 놓일 자리를 미리 뽑아 둔다.
+
+   담길 때마다 난수를 새로 뽑으면 이미 담긴 떡까지 자리가 바뀌어서
+   소쿠리 안이 매 프레임 요동친다. 판을 깔 때 넉넉히 뽑아 두고
+   담은 수만큼 앞에서부터 꺼내 쓴다. */
+function 자리뽑기() {
+  자리 = [];
+  const 한줄 = Math.max(3, Math.floor((담는칸.우 - 담는칸.좌) / (떡크기 * 0.72)));
+  const 층높이 = 떡크기 * 0.44;
+  // 뒤 테두리를 넘지 않는 만큼만 쌓는다. 넘치면 떡이 허공에 뜬다.
+  const 최대층 = Math.max(1, Math.floor((담는칸.아래 - 담는칸.천장) / 층높이));
+
+  for (let 층 = 0; 층 < 최대층; 층++) {
+    for (let 칸 = 0; 칸 < 한줄; 칸++) {
+      // 층마다 반 칸씩 어긋나게 놓아야 쌓인 것처럼 보인다
+      const 밀기 = (층 % 2) * (떡크기 * 0.36);
+      자리.push({
+        x: 담는칸.좌 + 떡크기 / 2 + 칸 * (떡크기 * 0.72) + 밀기
+           + (Math.random() * 2 - 1) * 3,
+        y: 담는칸.아래 - 층 * 층높이 + (Math.random() * 2 - 1) * 2,
+        기울기: (Math.random() * 2 - 1) * 0.22,
+        종류: 0,          // 담을 때 정해진다
+      });
+    }
+  }
+}
+
+/* 마법진을 그린다. 고리 셋이 서로 다른 속도로, 반대로 돈다.
+
+   한 덩어리로 돌리면 그냥 회전하는 그림이라 밋밋하다. 따로 돌리면
+   눈이 어디를 봐야 할지 몰라 계속 움직이는 것처럼 느낀다. */
+function 마법진그리기(세기) {
+  const { x, y, rx, ry } = 마법진;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";   // 빛이라 겹칠수록 밝아진다
+
+  const 빛 = (a) => "rgba(255, 238, 205, " + (a * 세기).toFixed(3) + ")";
+
+  // 바깥 고리
+  for (const [반, 두께, 밝기] of [[1.0, 2.2, 0.85], [0.74, 1.4, 0.55], [0.42, 1.8, 0.7]]) {
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx * 반, ry * 반, 0, 0, 6.2832);
+    ctx.strokeStyle = 빛(밝기);
+    ctx.lineWidth = 두께;
+    ctx.shadowColor = 빛(0.9);
+    ctx.shadowBlur = 14;
+    ctx.stroke();
+  }
+
+  // 눈금. 바깥 고리를 따라 촘촘히 — 이게 있어야 "무늬" 로 읽힌다
+  const 눈금수 = 48;
+  ctx.lineWidth = 1.3;
+  ctx.strokeStyle = 빛(0.5);
+  for (let i = 0; i < 눈금수; i++) {
+    const a = (i / 눈금수) * 6.2832 + 시계 * 0.22;
+    const 길이 = (i % 4 === 0) ? 0.12 : 0.06;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(a) * rx * (1 - 길이), y + Math.sin(a) * ry * (1 - 길이));
+    ctx.lineTo(x + Math.cos(a) * rx, y + Math.sin(a) * ry);
+    ctx.stroke();
+  }
+
+  // 가운데 마름모 두 개가 서로 반대로 돈다
+  for (const [반, 방향, 밝기] of [[0.34, 1, 0.75], [0.24, -1, 0.5]]) {
+    ctx.beginPath();
+    for (let k = 0; k < 4; k++) {
+      const a = k * 1.5708 + 시계 * 0.5 * 방향;
+      const px = x + Math.cos(a) * rx * 반;
+      const py = y + Math.sin(a) * ry * 반;
+      if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = 빛(밝기);
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+
+  // 고리 위를 도는 작은 원 넷
+  for (let k = 0; k < 4; k++) {
+    const a = k * 1.5708 - 시계 * 0.35;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * rx * 0.74, y + Math.sin(a) * ry * 0.74, 5.5, 0, 6.2832);
+    ctx.strokeStyle = 빛(0.8);
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+  }
+
+  // 가까운 쪽(위) 호를 한 번 더 덧그려 밝게 — 올려다본 것으로 읽히게 한다
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, Math.PI, 6.2832);
+  ctx.strokeStyle = 빛(0.9);
+  ctx.lineWidth = 3.2;
+  ctx.shadowBlur = 22;
+  ctx.stroke();
+
+  // 흘러내리는 빛 알갱이
+  for (const s of 반짝) {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, 6.2832);
+    ctx.fillStyle = 빛(s.a);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* 한 덩이를 그린다. 값이 2면 알 둘, 3이면 알 셋이 모여 있다.
+
+   알 크기는 셋 다 똑같다. 두 빛깔 떡은 "흰떡만 한 것이 두 개 겹쳐 있는 것"
+   으로 읽혀야 값이 둘이라는 게 바로 온다. 작게 그리면 그냥 무늬로 보인다.
+   대신 겹침을 깊게 줘서 소쿠리를 다 잡아먹지 않게 했다. */
+function 떡하나(cx, cy, 종류) {
+  const 알들 = 떡종류[종류].알;
+  const 크기 = 떡크기;
+
+  for (const a of 알들) {
+    const x = cx + a.x * 떡크기;
+    const y = cy + a.y * 떡크기;
+    const g = 알그림(a.색);
+    if (g) {
+      ctx.drawImage(g, x - 크기 / 2, y - 크기 / 2, 크기, 크기);
+      continue;
+    }
+    // 그림이 아직 안 왔을 때 쓰는 대체 모양
+    ctx.beginPath();
+    ctx.ellipse(x, y, 크기 * 0.46, 크기 * 0.38, 0, 0, 6.2832);
+    ctx.fillStyle = a.색 || "#f6efe2";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(150,120,90,.6)"; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  // 도전 전에는 마법진이 은은하게만 떠 있다
+  마법진그리기(state === "running" ? 1 : 0.42);
+
+  // 뒤 소쿠리. 그림이 아직 안 왔을 때 쓰는 대체 모양도 함께 둔다.
+  if (왔나("뒤")) {
+    ctx.drawImage(그림["뒤"], BASKET_X, BASKET_Y, BASKET_W, BASKET_H);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(BASKET_X, BASKET_Y + BASKET_H * 0.3);
+    ctx.lineTo(BASKET_X + BASKET_W * 0.16, BASKET_Y + BASKET_H);
+    ctx.lineTo(BASKET_X + BASKET_W * 0.84, BASKET_Y + BASKET_H);
+    ctx.lineTo(BASKET_X + BASKET_W, BASKET_Y + BASKET_H * 0.3);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(168, 133, 88, .75)"; ctx.fill();
+    ctx.strokeStyle = "rgba(110, 84, 50, .8)"; ctx.lineWidth = 2; ctx.stroke();
+  }
+
+  // 소쿠리에 내려앉은 떡. 뒤에 놓인 것부터 그려야 앞엣것이 위로 온다.
+  // 공중에 있는 것은 여기서 빼고 아래에서 따로 그린다.
+  const 끝 = Math.min(떨어진칸 - 떨어지는것.length, 자리.length);
+  for (let i = 0; i < 끝; i++) {
+    const p = 자리[i];
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.기울기);
+    떡하나(0, 0, p.종류);
+    ctx.restore();
+  }
+
+  // 아직 공중에 있는 떡. 앞 테두리보다 먼저 그려야
+  // 소쿠리에 들어가는 마지막 순간에 테두리 뒤로 쏙 들어간다.
+  for (const f of 떨어지는것) {
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.각);
+    떡하나(0, 0, f.종류);
+    ctx.restore();
+  }
+
+  /* 앞 테두리 층은 걷어냈다.
+
+     떡이 쌓이는 자리가 소쿠리 높이의 0.575 까지인데 앞 테두리는 0.66 부터
+     그려진다. 겹치는 데가 거의 없어서 "안에 담긴" 효과는 못 내고
+     테두리만 두 겹으로 보였다. 뒤 소쿠리 그림에 이미 앞 테가 들어 있다. */
+}
+
+function 안내() {
+  const 남은 = Math.max(0, R.limitSec - elapsed());
+  // 목표는 판 내내 보여 준다. 담은 수는 앞의 몇 개까지만.
+  const 센것 = 담은수 <= R.showUntil
+    ? "<b class='num'>" + 담은수 + "</b>"
+    : "<b class='num'>?</b>";
+  status.innerHTML = "목표 <b class='goal'>" + 목표 + "</b>개"
+                   + " &nbsp;·&nbsp; 담은 떡 " + 센것
+                   + " &nbsp;·&nbsp; 남은 시간 <b class='time'>"
+                   + 남은.toFixed(1) + "</b>초";
+}
+
+/* 공중에 있는 떡과 빛 알갱이를 한 칸 움직인다.
+
+   떨어지는 길은 포물선으로 잡았다. 등속으로 내리면 종이가 내려앉는 것 같고,
+   끝에서 빨라져야 떡의 무게가 느껴진다. */
+function 움직이기(dt) {
+  시계 += dt;
+
+  for (let i = 떨어지는것.length - 1; i >= 0; i--) {
+    const f = 떨어지는것[i];
+    f.t += dt;
+    const u = Math.min(1, f.t / 낙하시간);
+    const 가속 = u * u;                       // 갈수록 빨라진다
+    f.x = f.x0 + (f.목적.x - f.x0) * u;
+    f.y = f.y0 + (f.목적.y - f.y0) * 가속;
+    f.각 += f.각속도 * dt;
+    if (u >= 1) {
+      // 닿는 소리는 여기서 내지 않는다. 떡이 생길 때로 옮겼다 —
+      // 연타 게임이라 손이 누른 순간과 소리가 붙어야 손맛이 난다.
+      떨어지는것.splice(i, 1);
+    }
+  }
+
+  for (let i = 반짝.length - 1; i >= 0; i--) {
+    const s = 반짝[i];
+    s.y += s.vy * dt;
+    s.a -= dt * 1.5;
+    if (s.a <= 0) 반짝.splice(i, 1);
+  }
+}
+
+let 지난프레임 = 0;
+
+/* 마법진은 판이 안 돌 때도 천천히 돌아야 한다. 멈춰 있으면 그림 한 장으로
+   보여서 "이게 뭔가" 가 안 읽힌다. 그래서 루프는 늘 돌리고,
+   시간 판정만 진행 중일 때 본다. */
+function tick(now) {
+  const dt = 지난프레임 ? Math.min(0.1, (now - 지난프레임) / 1000) : 1 / 60;
+  지난프레임 = now;
+
+  움직이기(dt);
+
+  if (state === "running") {
+    // 여기서 return 하면 루프가 그대로 끊긴다. 그러면 다음 판에서
+    // 떡이 마법진에 붙은 채 안 떨어진다 — 판이 끝나도 루프는 계속 돈다.
+    if (elapsed() >= R.limitSec) finish();
+    else 안내();
+  }
+  draw();
+  raf = requestAnimationFrame(tick);
+}
+
+function reset() {
+  state = "ready";
+  담은수 = 0;
+  떨어진칸 = 0;
+  떨어지는것 = [];
+  반짝 = [];
+  목표 = R.minTarget + Math.floor(Math.random() * (R.maxTarget - R.minTarget + 1));
+  주머니채우기();
+  자리뽑기();
+  slot.innerHTML = "";
+  status.innerHTML = "목표는 <b>도전</b>을 누르면 나옵니다"
+                   + " &nbsp;·&nbsp; <b>" + R.limitSec.toFixed(0) + "</b>초";
+  go.textContent = "도 전";
+  draw();
+}
+
+// 마법진이 늘 돌도록 루프를 한 번만 걸어 둔다
+function 루프시작() {
+  if (raf) return;
+  지난프레임 = 0;
+  raf = requestAnimationFrame(tick);
+}
+
+function start() {
+  state = "running";
+  담은수 = 0;
+  떨어진칸 = 0;
+  떨어지는것 = [];
+  // 목표는 판을 깔 때 이미 뽑아 두었다. 여기서 다시 뽑으면
+  // 도전 전에 잠깐 보였던 값과 실제 목표가 어긋난다.
+  slot.innerHTML = "";
+  /* 다른 게임은 진행 중에 이 버튼이 "포 기" 다. 이 게임만 다르다.
+
+     여기서는 이 버튼이 곧 조작이다 — 누르면 떡이 담긴다.
+     그런데 이름만 "포 기" 로 두었더니, 누르면 그만두는 줄 알고
+     못 누르는 버튼이 되어 있었다. 하는 일을 그대로 적는다. */
+  go.textContent = "담 기";
+  t0 = performance.now();
+  안내();
+  draw();
+}
+
+// 한 번 누를 때마다 한 개
+const 무대 = document.querySelector(".stage");
+function 담기() {
+  if (state !== "running") return;
+
+  const 종류 = 떡뽑기();
+  const 값 = 떡종류[종류].값;
+
+  /* 한 번 누르면 떡 한 덩이가 떨어진다. 다만 그 덩이가 몇 켜냐에 따라
+     세는 값이 1·2·3 으로 다르다. 세 켜짜리는 세 개가 붙은 것이니
+     화면에도 한 덩이로 놓는 것이 맞다.
+
+     그래서 소쿠리 차오르는 속도와 점수가 일부러 어긋난다.
+     눈으로 부피를 보고 세는 길을 막아 둔 것이다. */
+  const 칸 = Math.min(떨어진칸, 자리.length - 1);
+  떨어진칸++;
+  담은수 += 값;
+  자리[칸].종류 = 종류;
+  const 목적 = 자리[칸];
+
+  /* 떡을 곧바로 소쿠리에 놓지 않고 마법진에서 떨어뜨린다.
+
+     바로 놓으면 숫자가 하나 늘 뿐이라 손맛이 없다. 위에서 떨어져
+     자리를 잡으면 "내가 하나 넣었다" 가 눈에 보인다.
+     연타하면 여러 개가 동시에 공중에 뜨는데, 그게 쏟아지는 느낌을 만든다. */
+  떨어지는것.push({
+    종류,
+    자리번호: 칸,
+    x0: 마법진.x + (Math.random() * 2 - 1) * 마법진.rx * 0.34,
+    y0: 마법진.y + 마법진.ry * 0.5,
+    목적, 각: 0,
+    각속도: (Math.random() * 2 - 1) * 5.5,
+    t: 0,
+    x: 마법진.x, y: 마법진.y,
+  });
+  // 마법진이 떡을 뱉을 때 빛이 함께 흩어진다
+  for (let i = 0; i < 5; i++) {
+    반짝.push({
+      x: 마법진.x + (Math.random() * 2 - 1) * 마법진.rx * 0.5,
+      y: 마법진.y + (Math.random() * 2 - 1) * 마법진.ry * 0.6,
+      vy: 26 + Math.random() * 46,
+      r: 1 + Math.random() * 1.8,
+      a: 0.5 + Math.random() * 0.5,
+    });
+  }
+  /* 떡이 새로 생길 때 나는 소리. 음높이를 조금씩 흩어 기계음처럼 안 들리게 한다.
+     세기는 다른 게임의 tick(0.045)보다 50% 크게 준다 — 연타 게임이라
+     한 번 한 번이 손에 걸려야 몇 개 담았는지 감이 온다. */
+  Sound.tick(0.9 + Math.random() * 0.3, 0.0675);
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    무대.classList.remove("tap");
+    void 무대.offsetWidth;
+    무대.classList.add("tap");
+  }
+  안내();
+  draw();
+}
+
+function finish() {
+  state = "done";
+  // 시간이 끝나는 순간 공중에 떠 있던 떡은 그대로 자리에 앉힌다.
+  // 세어 놓고 화면에 없으면 숫자와 그림이 어긋나 보인다.
+  떨어지는것 = [];
+  const 차이 = 담은수 - 목표;
+  const ok = 차이 === 0;
+
+  status.innerHTML = "목표 <b class='goal'>" + 목표 + "</b>개"
+                   + " &nbsp;·&nbsp; 담은 떡 <b class='num'>" + 담은수 + "</b>개";
+
+  slot.innerHTML = verdictHtml(ok,
+    ok ? 담은수 + " 개"
+       : (차이 > 0 ? 차이 + "개 초과" : (-차이) + "개 부족"), "");
+  go.textContent = "다 시";
+  setTimeout(() => { if (ok) Sound.success(); else Sound.fail(); }, 120);
+  draw();
+}
+
+function press() {
+  if (state === "ready") start();
+  else if (state === "running") 담기();
+  else reset();
+}
+
+go.addEventListener("click", (e) => { e.preventDefault(); press(); });
+cv.addEventListener("pointerdown", () => { if (state === "running") 담기(); });
+onPressKey(press);
+
+reset();
+루프시작();
+</script>
+</body>
+</html>
