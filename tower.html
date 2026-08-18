@@ -6,13 +6,13 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>삼색떡 해체</title>
-<link rel="stylesheet" href="common.css?v=155">
-<script src="common.js?v=155"></script>
-<script src="sound.js?v=155"></script>
+<link rel="stylesheet" href="common.css?v=166">
+<script src="common.js?v=166"></script>
+<script src="sound.js?v=166"></script>
 <style>
   :root { --accent-1: #34d399; --accent-2: #059669; }
 
-  .stage { background: url('assets/tower/bg.webp?v=155') center / cover no-repeat; }
+  .stage { background: url('assets/tower/bg.webp?v=166') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -48,10 +48,13 @@
   }
   .pick:hover { transform: translateY(-2px); filter: brightness(1.12); }
   .pick:active { transform: translateY(1px); }
-  /* 자판 글자가 버튼의 전부다. 멀리서도 읽히게 크고 두껍게. */
-  .pick .key { font-size: 34px; font-weight: 900; line-height: 1;
-               color: #fff; letter-spacing: .02em;
-               text-shadow: 0 2px 4px rgba(0,0,0,.55); }
+  /* 자판 표시가 버튼의 전부다.
+
+     글꼴의 ← ↓ → 는 획이 가늘어 방송 화면에서 잘 안 보인다. 굵기도 글꼴마다
+     제각각이고, 글자라 아래로 살짝 처져서 버튼 한가운데에도 안 맞는다.
+     그래서 직접 그린 통짜 화살표를 쓴다 — 굵기와 자리를 우리가 정한다. */
+  .pick svg { width: 46px; height: 46px; display: block; fill: #fff;
+              filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
   .towerslot.idle .picks { opacity: .45; pointer-events: none; }
 
   .status { font-size: 15px; color: var(--text-dim); letter-spacing: .3px;
@@ -69,7 +72,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/tower.webp?v=155" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/tower.webp?v=166" alt=""></div>
     <div class="titles">
       <h1>삼색떡 해체</h1>
       <p>Color Stack</p>
@@ -87,7 +90,7 @@
         <div class="slot" id="slot"></div>
         <div class="controls">
           <button class="btn" id="go">도 전</button>
-          <div class="hint">A · S · D 키 또는 클릭</div>
+          <div class="hint">← ↓ → 키 또는 클릭</div>
         </div>
       </div>
     </div>
@@ -114,10 +117,10 @@
 const R = RULES.tower;
 
 Sound.use({
-  success: "assets/_sounds/common/success.mp3?v=155",
-  fail:    "assets/_sounds/common/fail.mp3?v=155",
-  whine:   "assets/_sounds/tower/whine.mp3?v=155",
-  bite:    "assets/_sounds/tower/bite.mp3?v=155",
+  success: "assets/_sounds/common/success.mp3?v=166",
+  fail:    "assets/_sounds/common/fail.mp3?v=166",
+  whine:   "assets/_sounds/tower/whine.mp3?v=166",
+  bite:    "assets/_sounds/tower/bite.mp3?v=166",
 });
 const cv     = document.getElementById("cv");
 const ctx    = cv.getContext("2d");
@@ -135,14 +138,26 @@ const W = cv.width, H = cv.height;
    전에는 색마다 동그라미·세모·별을 얹었다. 색약인 시청자를 위한 것이었는데
    화면이 번잡해져서 뺐다. 지금은 색으로만 가른다. */
 const 색떡 = [
-  { 이름: "빨강", 색: "#e04b3c", 키: "A", 자판: "KeyA" },
-  { 이름: "초록", 색: "#3da35d", 키: "S", 자판: "KeyS" },
-  { 이름: "파랑", 색: "#3f7fd0", 키: "D", 자판: "KeyD" },
+  { 이름: "빨강", 색: "#e04b3c", 키: "←", 자판: "ArrowLeft",  돌림: 180 },
+  { 이름: "초록", 색: "#3da35d", 키: "↓", 자판: "ArrowDown",  돌림: 90 },
+  { 이름: "파랑", 색: "#3f7fd0", 키: "→", 자판: "ArrowRight", 돌림: 0 },
 ];
+
+/* 버튼에 넣을 통짜 화살표.
+
+   24 칸 안에서 오른쪽을 향한 모양 하나만 그려 놓고 돌려 쓴다.
+   가운데(12,12)를 기준으로 돌리므로 어느 방향이든 버튼 한가운데에 온다.
+   자루는 두께 9, 촉은 밑변 16 — 46px 로 줄여도 획이 안 사라진다. */
+function 화살표(돌림) {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true">'
+       + '<g transform="rotate(' + 돌림 + ' 12 12)">'
+       + '<path d="M2.5 7.5h9.5V4l9.5 8-9.5 8v-3.5H2.5z"/>'
+       + '</g></svg>';
+}
 
 
 const 그림 = {};
-for (const 쌍 of [["떡", "assets/tower/rice-cake.webp?v=155"]]) {
+for (const 쌍 of [["떡", "assets/tower/rice-cake.webp?v=166"]]) {
   const im = new Image();
   im.onload = () => draw();
   im.src = 쌍[1];
@@ -343,7 +358,7 @@ function 버튼만들기() {
                        + 종.색 + "cc)";
     b.dataset.i = String(i);
     b.title = 종.이름;
-    b.innerHTML = '<span class="key">' + 종.키 + '</span>';
+    b.innerHTML = 화살표(종.돌림);
     picks.appendChild(b);
   });
 }
@@ -461,8 +476,8 @@ picks.addEventListener("click", (e) => {
 
 addEventListener("keydown", (e) => {
   if (state !== "running") return;
-  // e.key 가 아니라 e.code 로 본다. 한글 자판이 켜져 있으면
-  // e.key 는 "ㅁ"·"ㄴ"·"ㅇ" 이 되어 안 잡힌다.
+  // e.key 가 아니라 e.code 로 본다. 화살표는 한글 자판과 상관없지만,
+  // 자판을 다시 글자로 바꾸더라도 이 코드는 그대로 쓸 수 있다.
   const i = 색떡.findIndex((종) => 종.자판 === e.code);
   if (i >= 0) { e.preventDefault(); 고르기(i); }
 });

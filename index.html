@@ -9,11 +9,22 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>밤가네 미니게임</title>
-<link rel="stylesheet" href="common.css?v=155">
+<link rel="stylesheet" href="common.css?v=166">
 <style>
+  /* 무대는 잘라 내기만 하고 스크롤이 없다. 목록은 게임이 늘수록 길어지므로
+     이 칸만 굴러가게 해 둔다. 아래쪽에 여백을 둬야 마지막 줄이 바닥에 붙지 않는다. */
   .hub { position: absolute; inset: 0; display: flex;
-         flex-direction: column; align-items: center; padding-top: 26px;
+         flex-direction: column; align-items: center;
+         padding: 26px 0 28px; overflow-y: auto; overscroll-behavior: contain;
          --accent-1: #6366f1; --accent-2: #4f46e5; }
+  /* 굴림대는 얇게. 방송 화면에 굵은 막대가 지나가면 눈에 거슬린다. */
+  .hub::-webkit-scrollbar { width: 9px; }
+  .hub::-webkit-scrollbar-track { background: transparent; }
+  .hub::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16);
+                                  border-radius: 5px; border: 2px solid transparent;
+                                  background-clip: content-box; }
+  .hub::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.3);
+                                        background-clip: content-box; }
   .hub h1 { font-size: 28px; font-weight: 800; letter-spacing: -.5px; }
   .hub .lead { margin-top: 7px; font-size: 13px; color: var(--text-faint); }
 
@@ -39,7 +50,9 @@
           letter-spacing: .2px; }
   .note b { color: #fff; }
 
-  /* 4열 4줄. 게임이 늘면 카드를 낮춰서 무대 안에 그대로 담는다. */
+  /* 4열. 게임이 늘어 무대(720px) 를 넘기면 목록을 휠로 굴려 본다.
+     열을 늘리거나 카드를 줄이면 게임이 더 늘 때마다 또 손봐야 한다.
+     굴리게 두면 몇 개가 되든 그대로 쓴다. */
   .grid { margin-top: 11px; display: grid;
           grid-template-columns: repeat(4, 236px); gap: 11px; }
 
@@ -116,8 +129,8 @@
   </div>
 </div></div>
 
-<script src="common.js?v=155"></script>
-<script src="sound.js?v=155"></script>
+<script src="common.js?v=166"></script>
+<script src="sound.js?v=166"></script>
 <script>
 "use strict";
 
@@ -127,17 +140,17 @@
 // 2D 로 바꾼 게임부터 하나씩 그림을 붙여 나간다.
 const GAMES = [
   { file: "ricecut.html",   name: "떡 자르기",       c1: "#ec4899", c2: "#e11d48", icon: "knife",
-    img: "assets/_icons/ricecut.webp?v=155" },
+    img: "assets/_icons/ricecut.webp?v=166" },
   { file: "curling.html",   name: "조약돌 밀기",     c1: "#f59e0b", c2: "#ea580c", icon: "target",
-    img: "assets/_icons/curling.webp?v=155" },
+    img: "assets/_icons/curling.webp?v=166" },
   { file: "stack.html",     name: "돌탑 쌓기",       c1: "#0ea5e9", c2: "#4f46e5", icon: "stack",
-    img: "assets/_icons/stack.webp?v=155" },
+    img: "assets/_icons/stack.webp?v=166" },
   { file: "oddone.html",    name: "콩 고르기",       c1: "#14b8a6", c2: "#0d9488", icon: "odd",
-    img: "assets/_icons/oddone.webp?v=155" },
+    img: "assets/_icons/oddone.webp?v=166" },
   { file: "fill.html",      name: "떡 담기",         c1: "#fb7185", c2: "#e11d48", icon: "basket",
-    img: "assets/_icons/fill.webp?v=155" },
+    img: "assets/_icons/fill.webp?v=166" },
   { file: "tower.html",     name: "삼색떡 해체",    c1: "#34d399", c2: "#059669", icon: "tower",
-    img: "assets/_icons/tower.webp?v=155" },
+    img: "assets/_icons/tower.webp?v=166" },
 ];
 
 // 아이콘은 선으로만 그린다. 배경 타일 색이 게임을 구분해 준다.
@@ -169,6 +182,17 @@ const ICONS = {
        + '<rect x="9.5" y="5" width="5" height="14" rx="1"/>'
        + '<rect x="16.5" y="5" width="5" height="14" rx="1"/>'
        + '<path d="M6 12h.01M13 12h.01M20 12h.01"/>',
+  // 곶감 두름 — 줄에 꿴 곶감을 몇 개인지 센다
+  count: '<path d="M4 5h16"/><circle cx="8" cy="10" r="3"/><circle cx="15" cy="10" r="3"/>'
+       + '<circle cx="8" cy="17" r="3"/><circle cx="15" cy="17" r="3"/>',
+  // 장대와 떨어지는 감
+  pole:  '<path d="M4 20L16 6"/><circle cx="18" cy="5" r="2.6"/>'
+       + '<circle cx="11" cy="16" r="2.2"/><circle cx="6" cy="12" r="1.8"/>',
+  // 장독 항아리 — 두드려 소리를 듣는다
+  jar:   '<path d="M8 6h8l1.5 3c1.5 2 1.5 8 0 10H6.5c-1.5-2-1.5-8 0-10z"/>'
+       + '<path d="M6 6h12"/>',
+  // 연과 연줄
+  kite:  '<path d="M12 3l6 6-6 6-6-6z"/><path d="M12 15v6"/><path d="M10 21c2-1 2-2 4-3"/>',
 };
 
 const grid = document.getElementById("grid");
