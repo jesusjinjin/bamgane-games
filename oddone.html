@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>콩 고르기</title>
-<link rel="stylesheet" href="common.css?v=173">
-<script src="common.js?v=173"></script>
-<script src="sound.js?v=173"></script>
+<link rel="stylesheet" href="common.css?v=176">
+<script src="common.js?v=176"></script>
+<script src="sound.js?v=176"></script>
 <style>
   :root { --accent-1: #14b8a6; --accent-2: #0d9488; }
 
   /* 마당 멍석을 위에서 내려다본 배경. 가운데는 결만 있어 콩이 잘 보인다. */
-  .stage { background: url('assets/oddone/bg.webp?v=173') center / cover no-repeat; }
+  .stage { background: url('assets/oddone/bg.webp?v=176') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -84,7 +84,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/oddone.webp?v=173" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/oddone.webp?v=176" alt=""></div>
     <div class="titles">
       <h1>콩 고르기</h1>
       <p>Odd One Out</p>
@@ -136,7 +136,7 @@ pad.style.gridTemplateColumns = "repeat(" + R.cols + ", 48px)";
 const beanImg = new Image();
 let beanReady = false;
 beanImg.onload = () => { 평균재기(); beanReady = true; reset(); };
-beanImg.src = "assets/oddone/bean.webp?v=173";
+beanImg.src = "assets/oddone/bean.webp?v=176";
 
 /* ── 색 차이를 사람 눈 기준으로 재는 자 ──────────────────────────
    회차마다 "이만큼 다르게" 를 ΔE 로 정해 두고, 그 ΔE 가 나오는
@@ -263,7 +263,7 @@ function tintBean(h, s, l) {
 }
 
 // 헛짚었을 때 낼 소리. 이 게임에서 파일로 된 소리는 이것 하나다.
-Sound.use({ oops: "assets/_sounds/oddone/oops.mp3?v=173" });
+Sound.use({ oops: "assets/_sounds/oddone/oops.mp3?v=176" });
 
 const roundsBox = document.createElement("div");
 roundsBox.className = "rounds";
