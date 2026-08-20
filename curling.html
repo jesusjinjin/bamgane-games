@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>조약돌 밀기</title>
-<link rel="stylesheet" href="common.css?v=176">
-<script src="common.js?v=176"></script>
-<script src="sound.js?v=176"></script>
+<link rel="stylesheet" href="common.css?v=180">
+<script src="common.js?v=180"></script>
+<script src="sound.js?v=180"></script>
 <style>
   :root { --accent-1: #f59e0b; --accent-2: #ea580c; }
 
   /* 겨울 우물가. 가운데 얼음판이 돌이 미끄러지는 길이다. */
-  .stage { background: url('assets/curling/bg.webp?v=176') center / cover no-repeat; }
+  .stage { background: url('assets/curling/bg.webp?v=180') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -58,7 +58,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/curling.webp?v=176" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/curling.webp?v=180" alt=""></div>
     <div class="titles">
       <h1>조약돌 밀기</h1>
       <p>Mini Curling</p>
@@ -87,7 +87,7 @@
         <li>얼음 기둥과 사방 끝에서 튕깁니다</li>
         <li>과녁 한가운데 멈춰야 성공</li>
         <li>기회는 한 번뿐입니다</li>
-        <li><b>[성공기준]</b> 과녁 8.5px 이내</li>
+        <li><b>[성공기준]</b> 과녁 10px 이내</li>
       </ul>
     </aside>
   </div>
@@ -100,10 +100,10 @@
 const R = RULES.curling;
 
 Sound.use({
-  thud:       "assets/_sounds/curling/release.mp3?v=176",  // 놓고 미는 순간 · 멈춤
-  slide:      "assets/_sounds/curling/slide.mp3?v=176",    // 미끄러지는 지속음
-  success:    "assets/_sounds/common/success.mp3?v=176",
-  fail:       "assets/_sounds/common/fail.mp3?v=176",
+  thud:       "assets/_sounds/curling/release.mp3?v=180",  // 놓고 미는 순간 · 멈춤
+  slide:      "assets/_sounds/curling/slide.mp3?v=180",    // 미끄러지는 지속음
+  success:    "assets/_sounds/common/success.mp3?v=180",
+  fail:       "assets/_sounds/common/fail.mp3?v=180",
 });
 const cv     = document.getElementById("cv");
 const ctx    = cv.getContext("2d");
@@ -128,7 +128,12 @@ const STONE_R = 15 * SCALE;      // 판정은 중심 좌표로 한다. 이 값�
    지금까지와 같은 만큼 당겼을 때 세기가 그대로다 — 손에 익은 감각을 지킨다.
    위쪽으로 쓸 구간만 더 생기는 셈이다. */
 const MAX_PULL = 252 * SCALE;
-const TARGET_R = R.targetR * SCALE;   // 성공 반지름 10 → 8.5
+/* 성공 반지름. 규칙에 적힌 px 을 그대로 쓴다.
+
+   예전에는 여기에 SCALE 을 곱해서 10 이 8.5 가 됐다. 규칙 카드에는 8.5 라고
+   맞게 적혀 있었지만, 규칙 파일의 숫자와 실제 판정이 달라 손볼 때마다 헷갈린다.
+   과녁 그림도 이 값으로 그리므로 보이는 크기와 판정이 늘 같다. */
+const TARGET_R = R.targetR;
 
 // 돌이 노는 구간의 높이. 캔버스는 프레임에 맞춰 432 로 키웠지만
 // 이 값은 예전 캔버스 높이(240)를 그대로 곱한 것이라 난이도가 안 바뀐다.
@@ -149,7 +154,7 @@ const WALL_LEFT = STONE_R + 2;
 const stoneImg = new Image();
 let stoneReady = false;
 stoneImg.onload = () => { stoneReady = true; draw(); };
-stoneImg.src = "assets/curling/stone.webp?v=176";
+stoneImg.src = "assets/curling/stone.webp?v=180";
 
 let state = "ready";             // ready | aiming | sliding | done
 let stone = { x: START_X, y: CY, vx: 0, vy: 0 };
@@ -159,11 +164,54 @@ let pulling = false;
 let pull = { x: 0, y: 0 };       // 당긴 정도
 let anim = 0;
 
-// 얼음 마찰은 고정한다. 매판 다르게 하면 같은 세기로 당겨도 결과가 140px 넘게
-// 벌어져서 실력이 아니라 운으로 갈린다.
-const FRICTION = 0.982;
+/* 얼음 마찰은 고정한다. 매판 다르게 하면 같은 세기로 당겨도 결과가 140px 넘게
+   벌어져서 실력이 아니라 운으로 갈린다.
+
+   미끄러짐을 **두 단계**로 나눈다.
+
+   예전에는 v *= 0.982 하나뿐이었는데, 그러면 속도가 0.64초마다 반토막 나서
+   처음 1초에 힘이 확 죽고, 그다음 마지막 10% 거리를 **3.4초 동안 기어갔다.**
+   "가다가 금방 뚝 멈춘다" 는 느낌이 여기서 나온다 — 실제로 멈춘 게 아니라
+   눈에 안 보이게 기어가는 것이다.
+
+   그래서 빠를 때는 마찰을 약하게(0.988) 걸어 오래 미끄러지게 하고,
+   느려지면 상수 감속으로 짧게 잦아들게 했다. 기어가는 꼬리가 3.4 → 1.4초로 줄고
+   최대 거리는 16% 늘었다.
+
+   상수 감속만 쓰면 당김과 거리의 관계가 휘어서(0.50 → 0.25) 약하게 당길 때
+   너무 짧아진다. 두 단계로 나눈 것은 그 관계를 곧게(0.46) 지키려는 것이다. */
+const FRICTION = 0.988;          // 빠를 때 한 칸마다 남는 속도
+const 잦문턱 = 2.2;              // 이 아래로 느려지면 잦아들기로 넘어간다 (×SCALE)
+
+/* 잦아들 때 줄어드는 양은 **숫자로 박지 않고 계산해서 쓴다.**
+
+   0.06 으로 박아 뒀더니 넘어가는 순간 감속이 3.1배로 확 세져서,
+   멎기 직전에 급정거하는 것처럼 보였다. 눈은 속도보다 속도의 변화를 먼저 읽는다.
+
+   문턱 × (1-FRICTION) 은 바로 그 문턱 속도에서 지수 감쇠가 줄이던 양과 같다.
+   그래서 넘어가는 순간 감속이 이어지고, 오던 결 그대로 천천히 멎는다.
+   마찰이나 문턱을 나중에 고쳐도 이 식이 알아서 따라온다. */
+const 잦감속 = 잦문턱 * (1 - FRICTION);
+const 멈춤 = 0.04;               // 이보다 느리면 멎은 것으로 본다 (×SCALE)
 // 당긴 거리를 속도로 바꾸는 비율. 과녁 범위가 당김 구간의 한가운데 오도록 맞췄다.
-const POWER = 0.094;
+const POWER = 0.078;
+
+/* 한 칸만큼 미끄러뜨린다.
+
+   굴려 보기(과녁 놓기)와 실제 굴리기가 **똑같은 셈을 써야** 한다.
+   두 곳에 따로 적어 두면 한쪽만 고쳤을 때 과녁이 닿을 수 없는 자리에 놓인다. */
+function 한칸미끄러지기() {
+  const v = Math.hypot(stone.vx, stone.vy);
+  if (v > 잦문턱 * SCALE) {
+    stone.vx *= FRICTION;
+    stone.vy *= FRICTION;
+  } else if (v > 0) {
+    // 방향은 그대로 두고 크기만 상수로 깎는다
+    const 남 = Math.max(0, v - 잦감속 * SCALE) / v;
+    stone.vx *= 남;
+    stone.vy *= 남;
+  }
+}
 
 /* 얼음판에 홀로 선 삼각 고드름. 밑이 넓고 위가 뾰족하다.
 
@@ -229,13 +277,13 @@ function 굴려보기(당김, 각도) {
   let 튕김수 = 0, n = 0;
   while (n++ < 3000) {
     stone.x += stone.vx; stone.y += stone.vy;
-    stone.vx *= FRICTION; stone.vy *= FRICTION;
+    한칸미끄러지기();
     if (stone.y < WALL_TOP) { stone.y = WALL_TOP; stone.vy = -stone.vy * .7; 튕김수++; }
     if (stone.y > WALL_BOT) { stone.y = WALL_BOT; stone.vy = -stone.vy * .7; 튕김수++; }
     if (stone.x > WALL_RIGHT) { stone.x = WALL_RIGHT; stone.vx = -stone.vx * .7; 튕김수++; }
     if (stone.x < WALL_LEFT)  { stone.x = WALL_LEFT;  stone.vx = -stone.vx * .7; 튕김수++; }
     if (기둥충돌()) 튕김수++;
-    if (Math.hypot(stone.vx, stone.vy) <= 0.06 * SCALE) break;
+    if (Math.hypot(stone.vx, stone.vy) <= 멈춤 * SCALE) break;
   }
   const 끝 = { x: stone.x, y: stone.y, 튕김수 };
   stone = 담아둠;
@@ -571,8 +619,7 @@ function slide(now) {
     carry -= STEP;
     stone.x += stone.vx;
     stone.y += stone.vy;
-    stone.vx *= FRICTION;
-    stone.vy *= FRICTION;
+    한칸미끄러지기();
 
     // 위아래 벽에 부딪히면 튕긴다
     if (stone.y < WALL_TOP) { stone.y = WALL_TOP; stone.vy = -stone.vy * .7; 튕김 = true; }
@@ -583,7 +630,7 @@ function slide(now) {
     // 얼음 기둥에 부딪혀도 튕긴다
     if (기둥충돌()) 튕김 = true;
 
-    if (Math.hypot(stone.vx, stone.vy) <= 0.06 * SCALE) break;
+    if (Math.hypot(stone.vx, stone.vy) <= 멈춤 * SCALE) break;
   }
 
   // 위아래 벽에 부딪혔으면 그 순간 소리를 낸다.

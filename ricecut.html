@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>떡 자르기</title>
-<link rel="stylesheet" href="common.css?v=176">
-<script src="common.js?v=176"></script>
-<script src="sound.js?v=176"></script>
+<link rel="stylesheet" href="common.css?v=180">
+<script src="common.js?v=180"></script>
+<script src="sound.js?v=180"></script>
 <style>
   :root { --accent-1: #ec4899; --accent-2: #e11d48; }
 
   /* 부엌 배경. 가운데 띠는 비어 있어서 떡과 글자가 잘 보인다. */
-  .stage { background: url('assets/ricecut/bg.webp?v=176') center / cover no-repeat; }
+  .stage { background: url('assets/ricecut/bg.webp?v=180') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   /* 배경 위에서도 글자가 읽히게 위아래를 살짝 눌러 준다 */
   .stage::before {
@@ -46,7 +46,7 @@
   /* 떡 — 세 상태 그림이 같은 캔버스라 contain 으로 두면 크기가 저절로 맞는다 */
   .cake {
     position: relative; width: 768px; height: 154px;
-    background: url('assets/ricecut/cake-idle.webp?v=176') center / contain no-repeat;
+    background: url('assets/ricecut/cake-idle.webp?v=180') center / contain no-repeat;
     filter: drop-shadow(0 10px 16px rgba(40, 30, 20, .40));
   }
   /* 다 자르고 나면 온전한 그림을 숨기고 조각들로 바꿔 끼운다 */
@@ -57,7 +57,7 @@
      자기 몫만 보이게 한다. 폭과 미는 양은 코드가 넣는다. */
   .cake .piece {
     position: absolute; top: 0; height: 100%;
-    background-image: var(--face, url('assets/ricecut/cake-idle.webp?v=176'));
+    background-image: var(--face, url('assets/ricecut/cake-idle.webp?v=180'));
     background-repeat: no-repeat;
     background-size: 768px auto;
     transform: translateX(var(--sh, 0));
@@ -116,7 +116,7 @@
      가운데로 당겨야 화면에 보이는 자리와 실제 판정 자리가 맞는다. */
   .knife {
     position: absolute; top: -96px; bottom: 105px; width: 51px;
-    background: url('assets/ricecut/knife.webp?v=176') center / contain no-repeat;
+    background: url('assets/ricecut/knife.webp?v=180') center / contain no-repeat;
     transform: translateX(-50%);
     filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .5));
   }
@@ -138,7 +138,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/ricecut.webp?v=176" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/ricecut.webp?v=180" alt=""></div>
     <div class="titles">
       <h1>떡 자르기</h1>
       <p>Rice Cake Cut</p>
@@ -188,11 +188,11 @@ const R = RULES.ricecut;
 
 // 녹음된 소리를 등록한다. 오기 전에는 코드로 만든 소리가 대신 난다.
 Sound.use({
-  slice:       "assets/_sounds/ricecut/cut.mp3?v=176",     // 떡을 가르는 순간
-  swoosh:      "assets/_sounds/ricecut/swoosh.mp3?v=176",  // 칼이 지나가는 바람
-  thud:        "assets/_sounds/ricecut/miss.mp3?v=176",    // 도마를 치는 둔탁한 소리
-  success:     "assets/_sounds/common/success.mp3?v=176",
-  fail:        "assets/_sounds/common/fail.mp3?v=176",
+  slice:       "assets/_sounds/ricecut/cut.mp3?v=180",     // 떡을 가르는 순간
+  swoosh:      "assets/_sounds/ricecut/swoosh.mp3?v=180",  // 칼이 지나가는 바람
+  thud:        "assets/_sounds/ricecut/miss.mp3?v=180",    // 도마를 치는 둔탁한 소리
+  success:     "assets/_sounds/common/success.mp3?v=180",
+  fail:        "assets/_sounds/common/fail.mp3?v=180",
 });
 const cake   = document.getElementById("cake");
 const pieces = document.getElementById("pieces");
@@ -367,8 +367,8 @@ function 진행표시() {
 // cake-ok 은 이미 가운데가 갈려 있어 세 조각으로 나누면 엉뚱한 자국이 남는다.
 // 그래서 그 틈을 떡 몸통으로 메운 통짜 웃는 그림(cake-happy)을 따로 만들어 쓴다.
 const 표정 = {
-  ok:   "url('assets/ricecut/cake-happy.webp?v=176')",
-  fail: "url('assets/ricecut/cake-fail.webp?v=176')",
+  ok:   "url('assets/ricecut/cake-happy.webp?v=180')",
+  fail: "url('assets/ricecut/cake-fail.webp?v=180')",
 };
 
 function 조각내기(자른곳, ok) {
