@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>조약돌 밀기</title>
-<link rel="stylesheet" href="common.css?v=166">
-<script src="common.js?v=166"></script>
-<script src="sound.js?v=166"></script>
+<link rel="stylesheet" href="common.css?v=173">
+<script src="common.js?v=173"></script>
+<script src="sound.js?v=173"></script>
 <style>
   :root { --accent-1: #f59e0b; --accent-2: #ea580c; }
 
   /* 겨울 우물가. 가운데 얼음판이 돌이 미끄러지는 길이다. */
-  .stage { background: url('assets/curling/bg.webp?v=166') center / cover no-repeat; }
+  .stage { background: url('assets/curling/bg.webp?v=173') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -58,7 +58,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/curling.webp?v=166" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/curling.webp?v=173" alt=""></div>
     <div class="titles">
       <h1>조약돌 밀기</h1>
       <p>Mini Curling</p>
@@ -100,10 +100,10 @@
 const R = RULES.curling;
 
 Sound.use({
-  thud:       "assets/_sounds/curling/release.mp3?v=166",  // 놓고 미는 순간 · 멈춤
-  slide:      "assets/_sounds/curling/slide.mp3?v=166",    // 미끄러지는 지속음
-  success:    "assets/_sounds/common/success.mp3?v=166",
-  fail:       "assets/_sounds/common/fail.mp3?v=166",
+  thud:       "assets/_sounds/curling/release.mp3?v=173",  // 놓고 미는 순간 · 멈춤
+  slide:      "assets/_sounds/curling/slide.mp3?v=173",    // 미끄러지는 지속음
+  success:    "assets/_sounds/common/success.mp3?v=173",
+  fail:       "assets/_sounds/common/fail.mp3?v=173",
 });
 const cv     = document.getElementById("cv");
 const ctx    = cv.getContext("2d");
@@ -149,7 +149,7 @@ const WALL_LEFT = STONE_R + 2;
 const stoneImg = new Image();
 let stoneReady = false;
 stoneImg.onload = () => { stoneReady = true; draw(); };
-stoneImg.src = "assets/curling/stone.webp?v=166";
+stoneImg.src = "assets/curling/stone.webp?v=173";
 
 let state = "ready";             // ready | aiming | sliding | done
 let stone = { x: START_X, y: CY, vx: 0, vy: 0 };

@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>돌탑 쌓기</title>
-<link rel="stylesheet" href="common.css?v=166">
-<script src="common.js?v=166"></script>
-<script src="sound.js?v=166"></script>
+<link rel="stylesheet" href="common.css?v=173">
+<script src="common.js?v=173"></script>
+<script src="sound.js?v=173"></script>
 <style>
   :root { --accent-1: #0ea5e9; --accent-2: #4f46e5; }
 
   /* 뒷산 오솔길. 가운데 흙길이 세로로 비어 있어 탑이 올라갈 자리가 된다. */
-  .stage { background: url('assets/stack/bg.webp?v=166') center / cover no-repeat; }
+  .stage { background: url('assets/stack/bg.webp?v=173') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -67,7 +67,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/stack.webp?v=166" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/stack.webp?v=173" alt=""></div>
     <div class="titles">
       <h1>돌탑 쌓기</h1>
       <p>Stack</p>
@@ -107,9 +107,9 @@
 const R = RULES.stack;
 
 Sound.use({
-  thud:        "assets/_sounds/stack/place-hard.mp3?v=166", // 돌이 얹히는 소리
-  success:     "assets/_sounds/common/success.mp3?v=166",
-  fail:        "assets/_sounds/common/fail.mp3?v=166",
+  thud:        "assets/_sounds/stack/place-hard.mp3?v=173", // 돌이 얹히는 소리
+  success:     "assets/_sounds/common/success.mp3?v=173",
+  fail:        "assets/_sounds/common/fail.mp3?v=173",
 });
 const cv     = document.getElementById("cv");
 const ctx    = cv.getContext("2d");
@@ -132,7 +132,7 @@ const VIEW_ROWS = 15;            // 화면에 보이는 층 수 (넘으면 아�
 const stoneImg = new Image();
 let stoneReady = false;
 stoneImg.onload = () => { stoneReady = true; draw(); };
-stoneImg.src = "assets/stack/stone.webp?v=166";
+stoneImg.src = "assets/stack/stone.webp?v=173";
 
 /* 돌을 붉은 벽돌빛으로 물들인다.
 
