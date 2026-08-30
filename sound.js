@@ -515,12 +515,16 @@ const Sound = (() => {
      **뽑은 그 곡만** 받는다. 시청자가 받아야 하는 양이 350KB 로 줄어든다. */
   const 배경음악수 = 7;
 
-  function bgm(vol) {
+  /* vol 은 크기, 곡번호를 주면 그 곡만 튼다 (안 주면 아무거나).
+
+     홈화면은 늘 같은 곡이어야 한다. 갈 때마다 딴 곡이 나오면
+     "돌아왔다" 는 느낌이 없고, 게임을 오갈 때마다 음악이 바뀌어 산만하다. */
+  function bgm(vol, 곡번호) {
     const c = ctx(); if (!c || muted || 도는것.bgm) return;
     // 손잡이를 0 으로 내려 뒀으면 받지도 않는다. 안 들을 곡을 350KB 받을 이유가 없다.
     // 나중에 손잡이를 올리면 그때 이 함수가 다시 불린다.
     if (볼륨.bgm <= 0) return;
-    const n = 1 + Math.floor(Math.random() * 배경음악수);
+    const n = 곡번호 || (1 + Math.floor(Math.random() * 배경음악수));
     const 주소 = "assets/_sounds/bgm/배경음악_" + n + ".mp3";
     fetch(주소)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
