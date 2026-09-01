@@ -9,7 +9,7 @@
    배포용은 만들 때 이 파일을 그대로 복사해 가므로, 그때 값이 그대로 박힌다.
    관리용을 0.02 로 올려도 배포를 안 하면 배포용은 0.01 로 남는다.
    두 화면을 나란히 띄우면 무엇이 아직 안 나갔는지 눈으로 보인다. */
-const VERSION = "0.09";
+const VERSION = "0.10";
 
 /* 난이도. 여기 숫자만 고치면 모든 게임에 반영된다.
    값은 사람의 오차 분포로 시뮬레이션해 성공률 5% 안팎으로 잡은 것이다.
@@ -267,13 +267,31 @@ const 소리설정 = (() => {
     try { localStorage.setItem(열쇠[k], String(값[k])); } catch (_) {}
     if (typeof Sound !== "undefined") Sound.setVolume(k, 값[k]);
   };
+  /* 저장해 둔 값을 다시 읽어 Sound 에 넣는다.
+
+     화면이 살아 있는 동안 **다른 화면이 값을 바꿔 놓았을 때** 쓴다.
+     브라우저 뒤로가기로 돌아온 경우(bfcache)와 창을 두 개 띄운 경우다.
+     둘 다 이 화면의 코드는 다시 돌지 않으므로 스스로는 알 수가 없다. */
+  const 다시읽기 = () => {
+    for (const k in 열쇠) {
+      let v = null;
+      try { v = localStorage.getItem(열쇠[k]); } catch (_) {}
+      if (v != null) 값[k] = Math.max(0, Math.min(1, parseFloat(v) || 0));
+    }
+    try { 다끔 = localStorage.getItem(음소거열쇠) === "1"; } catch (_) {}
+    if (typeof Sound === "undefined") return;
+    Sound.setVolume("sfx", 값.sfx);
+    Sound.setVolume("bgm", 값.bgm);
+    Sound.setMuted(다끔);
+  };
+
   const 음소거읽기 = () => 다끔;
   const 음소거쓰기 = (v) => {
     다끔 = !!v;
     try { localStorage.setItem(음소거열쇠, 다끔 ? "1" : "0"); } catch (_) {}
     if (typeof Sound !== "undefined") Sound.setMuted(다끔);
   };
-  return { 읽기, 쓰기, 음소거읽기, 음소거쓰기 };
+  return { 읽기, 쓰기, 다시읽기, 음소거읽기, 음소거쓰기 };
 })();
 
 /* 저장해 둔 값을 Sound 에 넣는다.
@@ -348,6 +366,13 @@ addEventListener("DOMContentLoaded", () => {
     줄.innerHTML = '<span class="nm">' + 이름 + '</span><span class="pc"></span>';
     const s = document.createElement("input");
     s.type = "range"; s.min = "0"; s.max = "100"; s.step = "5";
+    /* 브라우저가 이 손잡이를 되살리지 못하게 막는다.
+
+       뒤로가기로 돌아오면 브라우저는 **떠날 때 손잡이가 어디 있었는지**를
+       기억했다가 그대로 되돌려 놓는다(폼 복원). 글자로 적힌 % 와 실제 소리는
+       저장값을 읽어 맞는데 손잡이만 옛 자리에 있는, 가장 헷갈리는 꼴이 된다.
+       이 손잡이의 값은 폼이 아니라 브라우저 저장소에 있다. 되살릴 필요가 없다. */
+    s.autocomplete = "off";
     s.value = String(Math.round(소리설정.읽기(갈래) * 100));
     줄.appendChild(s);
     판.appendChild(줄);
@@ -383,6 +408,40 @@ addEventListener("DOMContentLoaded", () => {
     btn.title = "소리 조절";
   }
   그리기();
+
+  /* 다른 화면에서 바꾼 값을 이 화면에 맞춘다.
+
+     소리 설정은 브라우저에 적어 두므로 **새로 연 화면**은 늘 최신값을 읽는다.
+     문제는 이미 열려 있던 화면이다. 그쪽 코드는 다시 돌지 않으니 손잡이도
+     소리도 옛 값 그대로 남는다. 두 경우에 그렇게 된다.
+
+       뒤로가기   브라우저가 떠날 때 모습 그대로 되살린다(bfcache).
+                  게임에서 소리를 줄이고 뒤로가기로 목록에 오면
+                  목록은 줄이기 전 크기로 계속 울린다.
+       창 두 개   목록과 게임을 따로 띄워 두면 한쪽에서 줄여도 다른 쪽은 모른다.
+
+     그래서 되살아날 때와 저장값이 바뀔 때 다시 읽는다. */
+  const 들리나 = () => !소리설정.음소거읽기() && 소리설정.읽기("bgm") > 0;
+
+  function 맞추기() {
+    const 전 = 들리나();
+    소리설정.다시읽기();
+    for (const k in 손잡이) {
+      손잡이[k].s.value = String(Math.round(소리설정.읽기(k) * 100));
+    }
+    그리기();
+
+    /* 꺼져 있던 배경음악이 켜졌으면 그때 받아 튼다.
+
+       "안 돌고 있으면 튼다" 로 하면 안 된다. 화면을 처음 열 때도 이 함수가
+       도는데, 그때는 곡을 받는 중이라 아직 안 돌고 있다 — 같은 곡을 두 번
+       받아 온다(350KB). **꺼짐에서 켜짐으로 바뀐 순간에만** 튼다. */
+    if (!전 && 들리나() && !Sound.isLooping("bgm")) Sound.bgm(null, 이화면곡());
+  }
+  addEventListener("pageshow", () => 맞추기());
+  addEventListener("storage", (e) => {
+    if (!e.key || e.key.indexOf("bg_vol_") === 0 || e.key === "bg_mute_all") 맞추기();
+  });
 
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
