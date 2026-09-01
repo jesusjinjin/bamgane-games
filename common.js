@@ -9,7 +9,7 @@
    배포용은 만들 때 이 파일을 그대로 복사해 가므로, 그때 값이 그대로 박힌다.
    관리용을 0.02 로 올려도 배포를 안 하면 배포용은 0.01 로 남는다.
    두 화면을 나란히 띄우면 무엇이 아직 안 나갔는지 눈으로 보인다. */
-const VERSION = "0.07";
+const VERSION = "0.09";
 
 /* 난이도. 여기 숫자만 고치면 모든 게임에 반영된다.
    값은 사람의 오차 분포로 시뮬레이션해 성공률 5% 안팎으로 잡은 것이다.
@@ -243,6 +243,10 @@ function 이화면곡() { return document.querySelector(".hub") ? 홈화면곡 :
 const 소리설정 = (() => {
   const 열쇠 = { sfx: "bg_vol_sfx", bgm: "bg_vol_bgm" };
   const 값 = { sfx: 1, bgm: 1 };
+  // 전체 음소거는 손잡이와 따로 둔다. 껐다 켜면 원래 크기로 돌아와야 하는데,
+  // 손잡이를 0 으로 내려 버리면 얼마였는지를 잃는다.
+  const 음소거열쇠 = "bg_mute_all";
+  let 다끔 = false;
 
   // 예전에는 켜고 끄는 것뿐이었다. 꺼 두고 갔던 사람은 꺼진 채로 이어받는다.
   let 예전음소거 = false;
@@ -255,13 +259,21 @@ const 소리설정 = (() => {
     else 값[k] = Math.max(0, Math.min(1, parseFloat(v) || 0));
   }
 
+  try { 다끔 = localStorage.getItem(음소거열쇠) === "1"; } catch (_) {}
+
   const 읽기 = (k) => 값[k];
   const 쓰기 = (k, v) => {
     값[k] = Math.max(0, Math.min(1, v));
     try { localStorage.setItem(열쇠[k], String(값[k])); } catch (_) {}
     if (typeof Sound !== "undefined") Sound.setVolume(k, 값[k]);
   };
-  return { 읽기, 쓰기 };
+  const 음소거읽기 = () => 다끔;
+  const 음소거쓰기 = (v) => {
+    다끔 = !!v;
+    try { localStorage.setItem(음소거열쇠, 다끔 ? "1" : "0"); } catch (_) {}
+    if (typeof Sound !== "undefined") Sound.setMuted(다끔);
+  };
+  return { 읽기, 쓰기, 음소거읽기, 음소거쓰기 };
 })();
 
 /* 저장해 둔 값을 Sound 에 넣는다.
@@ -276,10 +288,17 @@ addEventListener("DOMContentLoaded", () => {
   if (typeof Sound === "undefined") return;
   Sound.setVolume("sfx", 소리설정.읽기("sfx"));
   Sound.setVolume("bgm", 소리설정.읽기("bgm"));
+  // 음소거로 두고 나갔으면 곡을 받지도 않는다 — Sound 쪽에서 막힌다.
+  Sound.setMuted(소리설정.음소거읽기());
 });
 
 addEventListener("DOMContentLoaded", () => {
-  const bar = document.querySelector(".topbar");
+  /* 붙일 자리. 게임 화면은 상단 바, 홈화면은 모드 고르는 줄(.sndmount) 이다.
+
+     예전에는 상단 바만 봤다. 홈화면에는 상단 바가 없어서 소리 조절이
+     아예 안 붙었고, 그래서 **게임에 들어가야만** 소리를 줄일 수 있었다.
+     방송에서 목록을 띄워 두는 시간이 짧지 않은데 그동안은 손댈 데가 없었다. */
+  const bar = document.querySelector(".topbar") || document.querySelector(".sndmount");
   if (!bar || typeof Sound === "undefined") return;
 
   const ON  = '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/>'
@@ -297,6 +316,30 @@ addEventListener("DOMContentLoaded", () => {
   판.className = "sndpanel";
   통.appendChild(판);
   bar.appendChild(통);
+
+  /* 전체 음소거. 손잡이 위에 놓는다 — 두 갈래를 한꺼번에 끄는 것이라
+     아래 것들을 거느리는 자리가 맞다.
+
+     손잡이를 0 으로 내리는 것과 다르다. 껐다 켜면 원래 크기로 돌아와야 하는데
+     손잡이를 내려 버리면 얼마였는지를 잃는다. 그래서 따로 둔다. */
+  const 끔 = document.createElement("button");
+  끔.className = "sndmute";
+  끔.type = "button";
+  끔.setAttribute("role", "switch");
+  끔.innerHTML = '<span class="nm">전체 음소거</span><span class="sw"></span>';
+  판.appendChild(끔);
+
+  끔.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const 켜자 = !소리설정.음소거읽기();
+    소리설정.음소거쓰기(켜자);
+    그리기();
+    /* 음소거를 풀면 배경음악을 다시 튼다. Sound.setMuted(true) 가 도는 것을
+       모두 멈추므로, 풀었을 때 아무도 다시 틀어 주지 않으면 조용한 채로 남는다. */
+    if (!켜자 && 소리설정.읽기("bgm") > 0 && !Sound.isLooping("bgm")) {
+      Sound.bgm(null, 이화면곡());
+    }
+  });
 
   const 손잡이 = {};
   for (const [갈래, 이름] of [["sfx", "효과음"], ["bgm", "배경음악"]]) {
@@ -317,7 +360,8 @@ addEventListener("DOMContentLoaded", () => {
       /* 배경음악은 0 이면 아예 안 받아 둔다. 올리는 순간 그때 받아 튼다.
          홈화면이면 처음 틀 때와 **같은 곡**이어야 한다 —
          손잡이를 만졌다고 딴 곡이 나오면 이상하다. */
-      if (갈래 === "bgm" && v > 0 && !Sound.isLooping("bgm")) Sound.bgm(null, 이화면곡());
+      if (갈래 === "bgm" && v > 0 && !소리설정.음소거읽기()
+          && !Sound.isLooping("bgm")) Sound.bgm(null, 이화면곡());
     });
   }
 
@@ -327,7 +371,13 @@ addEventListener("DOMContentLoaded", () => {
       손잡이[k].pc.textContent = Math.round(v * 100) + "%";
       손잡이[k].s.classList.toggle("zero", v <= 0);
     }
-    const 다꺼짐 = 소리설정.읽기("sfx") <= 0 && 소리설정.읽기("bgm") <= 0;
+    const 다끔 = 소리설정.음소거읽기();
+    끔.classList.toggle("on", 다끔);
+    끔.setAttribute("aria-checked", 다끔 ? "true" : "false");
+    // 음소거 중에는 손잡이를 흐리게. 만질 수는 있다 — 풀었을 때 쓸 값이다.
+    판.classList.toggle("muted", 다끔);
+
+    const 다꺼짐 = 다끔 || (소리설정.읽기("sfx") <= 0 && 소리설정.읽기("bgm") <= 0);
     btn.innerHTML = 다꺼짐 ? OFF : ON;
     btn.classList.toggle("off", 다꺼짐);
     btn.title = "소리 조절";

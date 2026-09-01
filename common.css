@@ -175,6 +175,34 @@ html, body {
 }
 .sndbox.open .sndpanel { display: block; }
 
+/* 전체 음소거 토글. 손잡이 위에 놓이고 아래와는 선으로 나눈다 —
+   두 갈래를 한꺼번에 끄는 것이라 같은 층으로 보이면 안 된다. */
+.sndmute {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 0 0 12px; margin-bottom: 12px;
+  font: inherit; background: none; border: 0;
+  border-bottom: 1px solid var(--line-soft); cursor: pointer;
+}
+.sndmute .nm { font-size: 12.5px; font-weight: 700; color: var(--text-dim); }
+.sndmute:hover .nm { color: #fff; }
+.sndmute.on .nm { color: #fff; }
+/* 미닫이 손잡이. 켜지면 왼쪽 끝의 알이 오른쪽으로 간다 */
+.sndmute .sw {
+  position: relative; flex: none; width: 38px; height: 21px; border-radius: 11px;
+  background: rgba(255, 255, 255, .1); border: 1px solid var(--line-soft);
+  transition: background .16s;
+}
+.sndmute .sw::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 15px; height: 15px; border-radius: 50%; background: #8b90a3;
+  transition: transform .16s, background .16s;
+}
+.sndmute.on .sw { background: #6366f1; border-color: #6366f1; }
+.sndmute.on .sw::after { transform: translateX(17px); background: #fff; }
+
+/* 음소거 중에는 아래 손잡이를 흐리게. 만질 수는 있다 — 풀었을 때 쓸 값이다. */
+.sndpanel.muted .sndrow { opacity: .42; }
+
 .sndrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; cursor: pointer; }
 .sndrow + .sndrow { margin-top: 13px; }
 .sndrow .nm { font-size: 12.5px; font-weight: 700; color: var(--text-dim); }
