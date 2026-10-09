@@ -5,19 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
-<title>떡 담기</title>
-<link rel="stylesheet" href="common.css?v=192">
-<script src="common.js?v=192"></script>
-<script src="sound.js?v=192"></script>
+<title>사탕 담기</title>
+<link rel="stylesheet" href="common.css?v=210">
+<script src="common.js?v=210"></script>
+<script src="sound.js?v=210"></script>
 <style>
   :root { --accent-1: #fb7185; --accent-2: #e11d48; }
 
-  .stage { background: url('assets/fill/bg.webp?v=192') center / cover no-repeat; }
-  .topbar { background: rgba(22, 22, 40, .42); }
+  /* 과자 왕국 — 딸기 정원. 상단 바·덧칠·안내줄 받침·규칙 카드 색은
+     common.css 의 theme-sweets 가 정한다 (body 에 class 를 달았다). */
+  .stage { background: url('assets/fill/candy-bg.webp?v=210') center / cover no-repeat; }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-    background: linear-gradient(180deg, rgba(24,18,16,.22) 0%, rgba(24,18,16,.03) 26%,
-                                        rgba(24,18,16,.22) 62%, rgba(24,18,16,.52) 100%);
   }
   .body { z-index: 1; }
 
@@ -62,8 +61,8 @@
 
   /* 방송 화면에서 목표와 남은 시간이 멀리서도 읽혀야 한다.
      이 게임만 두 배로 키운다 — 공용 값을 건드리면 열여덟 게임이 다 바뀐다. */
-  .status { font-size: 30px; color: var(--text-dim); letter-spacing: .3px;
-            text-shadow: 0 2px 8px rgba(0,0,0,.9); }
+  /* 받침 색은 공용 테마에서 온다. 여기서는 글자가 두 배라 받침 좌우 여백만 넓힌다. */
+  .status { font-size: 30px; letter-spacing: .3px; padding: 2px 26px 4px; }
   .status b { color: #fff; font-size: 34px; }
   .status .time, .status .num { font-variant-numeric: tabular-nums; }
   /* 목표 개수는 판 내내 떠 있어야 한다. 이걸 놓치면 게임이 성립하지 않는다. */
@@ -76,14 +75,14 @@
   .verdict.ok .mark { background: rgba(16,40,26,.72); border-color: #4ade80; }
 </style>
 </head>
-<body>
+<body class="theme-sweets">
 <div id="fit"><div class="stage">
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/fill.webp?v=192" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/fill-candy.webp?v=210" alt=""></div>
     <div class="titles">
-      <h1>떡 담기</h1>
+      <h1>사탕 담기</h1>
       <p>Fill the Basket</p>
     </div>
   </div>
@@ -104,10 +103,10 @@
     <aside class="rules card">
       <h2>규칙</h2>
       <ul>
-        <li>연타해서 떡을 담으세요</li>
-        <li>흰떡 1개, 2색떡 2개, 3색떡 3개 카운트됩니다</li>
+        <li>연타해서 사탕을 담으세요</li>
+        <li>흰 사탕 1개, 2색 사탕 2개, 3색 사탕 3개 카운트됩니다</li>
         <li>목표 개수는 매판 달라집니다</li>
-        <li>10개까지만 담은 떡 갯수가 보입니다</li>
+        <li>10개까지만 담은 사탕 갯수가 보입니다</li>
         <li>시간이 끝나야 결과를 압니다</li>
         <li>기회는 한 번뿐입니다</li>
         <li><b>[성공기준]</b> 목표와 정확히 일치</li>
@@ -123,8 +122,8 @@
 const R = RULES.fill;
 
 Sound.use({
-  success: "assets/_sounds/common/success.mp3?v=192",
-  fail:    "assets/_sounds/common/fail.mp3?v=192",
+  success: "assets/_sounds/common/success.mp3?v=210",
+  fail:    "assets/_sounds/common/fail.mp3?v=210",
 });
 const cv     = document.getElementById("cv");
 const ctx    = cv.getContext("2d");
@@ -152,8 +151,8 @@ ctx.setTransform(그림배, 0, 0, 그림배, 0, 0);
    떡이 쌓이는 자리가 앞 테두리보다 위라서 가려지는 데가 없었다.
    테두리만 두 겹으로 보여서 걷어냈다. */
 const 그림 = {};
-for (const 쌍 of [["뒤", "assets/fill/basket.webp?v=192"],
-                  ["떡", "assets/fill/rice-ball.webp?v=192"]]) {
+for (const 쌍 of [["뒤", "assets/fill/candy-basket.webp?v=210"],
+                  ["떡", "assets/fill/candy.webp?v=210"]]) {
   const im = new Image();
   im.onload = () => draw();
   im.src = 쌍[1];
@@ -383,9 +382,11 @@ function 자리뽑기() {
 function 마법진그리기(세기) {
   const { x, y, rx, ry } = 마법진;
   ctx.save();
-  ctx.globalCompositeOperation = "lighter";   // 빛이라 겹칠수록 밝아진다
+  /* 한옥 배경 때는 "lighter" 로 크림빛을 더해 빛처럼 보였다. 과자 왕국 배경은 바닥이 밝아서
+     밝은 빛을 더해도 거의 안 보인다. 그래서 장밋빛 선을 그냥 얹고 둘레에 흰 번짐을 준다. */
+  ctx.globalCompositeOperation = "source-over";
 
-  const 빛 = (a) => "rgba(255, 238, 205, " + (a * 세기).toFixed(3) + ")";
+  const 빛 = (a) => "rgba(214, 74, 128, " + (a * 세기).toFixed(3) + ")";
 
   // 바깥 고리
   for (const [반, 두께, 밝기] of [[1.0, 2.2, 0.85], [0.74, 1.4, 0.55], [0.42, 1.8, 0.7]]) {
@@ -393,7 +394,7 @@ function 마법진그리기(세기) {
     ctx.ellipse(x, y, rx * 반, ry * 반, 0, 0, 6.2832);
     ctx.strokeStyle = 빛(밝기);
     ctx.lineWidth = 두께;
-    ctx.shadowColor = 빛(0.9);
+    ctx.shadowColor = "rgba(255, 255, 255, " + (0.95 * 세기).toFixed(3) + ")";   // 흰 번짐
     ctx.shadowBlur = 14;
     ctx.stroke();
   }
@@ -535,7 +536,7 @@ function 안내() {
     ? "<b class='num'>" + 담은수 + "</b>"
     : "<b class='num'>?</b>";
   status.innerHTML = "목표 <b class='goal'>" + 목표 + "</b>개"
-                   + " &nbsp;·&nbsp; 담은 떡 " + 센것
+                   + " &nbsp;·&nbsp; 담은 사탕 " + 센것
                    + " &nbsp;·&nbsp; 남은 시간 <b class='time'>"
                    + 남은.toFixed(1) + "</b>초";
 }
@@ -700,7 +701,7 @@ function finish() {
   const ok = 차이 === 0;
 
   status.innerHTML = "목표 <b class='goal'>" + 목표 + "</b>개"
-                   + " &nbsp;·&nbsp; 담은 떡 <b class='num'>" + 담은수 + "</b>개";
+                   + " &nbsp;·&nbsp; 담은 사탕 <b class='num'>" + 담은수 + "</b>개";
 
   slot.innerHTML = verdictHtml(ok,
     ok ? 담은수 + " 개"

@@ -5,15 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
-<title>돌탑 쌓기</title>
-<link rel="stylesheet" href="common.css?v=192">
-<script src="common.js?v=192"></script>
-<script src="sound.js?v=192"></script>
+<title>케이크 층 쌓기</title>
+<link rel="stylesheet" href="common.css?v=210">
+<script src="common.js?v=210"></script>
+<script src="sound.js?v=210"></script>
 <style>
   :root { --accent-1: #0ea5e9; --accent-2: #4f46e5; }
 
   /* 뒷산 오솔길. 가운데 흙길이 세로로 비어 있어 탑이 올라갈 자리가 된다. */
-  .stage { background: url('assets/stack/bg.webp?v=192') center / cover no-repeat; }
+  .stage { background: url('assets/stack/sweets-bg.webp?v=210') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -62,14 +62,14 @@
   .verdict.ok .mark { background: rgba(16,40,26,.72); border-color: #4ade80; }
 </style>
 </head>
-<body>
+<body class="theme-sweets">
 <div id="fit"><div class="stage">
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/stack.webp?v=192" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/stack-sweets.webp?v=210" alt=""></div>
     <div class="titles">
-      <h1>돌탑 쌓기</h1>
+      <h1>케이크 층 쌓기</h1>
       <p>Stack</p>
     </div>
   </div>
@@ -90,8 +90,8 @@
     <aside class="rules card">
       <h2>규칙</h2>
       <ul>
-        <li>움직이는 돌을 눌러 쌓으세요</li>
-        <li>어긋난 만큼 돌이 깎입니다</li>
+        <li>움직이는 케이크 층을 눌러 쌓으세요</li>
+        <li>어긋난 만큼 케이크가 잘려 나갑니다</li>
         <li>완전히 빗나가면 즉시 실패</li>
         <li>기회는 한 번뿐입니다</li>
         <li><b>[성공기준]</b> 14층 쌓기</li>
@@ -107,9 +107,9 @@
 const R = RULES.stack;
 
 Sound.use({
-  thud:        "assets/_sounds/stack/place-hard.mp3?v=192", // 돌이 얹히는 소리
-  success:     "assets/_sounds/common/success.mp3?v=192",
-  fail:        "assets/_sounds/common/fail.mp3?v=192",
+  thud:        "assets/_sounds/stack/place-hard.mp3?v=210", // 돌이 얹히는 소리
+  success:     "assets/_sounds/common/success.mp3?v=210",
+  fail:        "assets/_sounds/common/fail.mp3?v=210",
 });
 const cv     = document.getElementById("cv");
 const ctx    = cv.getContext("2d");
@@ -117,7 +117,19 @@ const status = document.getElementById("status");
 const slot   = document.getElementById("slot");
 const go     = document.getElementById("go");
 
+/* 캔버스 알맹이를 두 배로 잡는다.
+
+   768×432 그대로 두면 방송 화면에서 무대가 커질 때 캔버스가 늘어나 테두리가 계단처럼 깨진다.
+   알맹이만 두 배로 키우고 그리는 좌표는 그대로 둔다(setTransform) — 게임 좌표·판정은 바뀌지 않는다.
+   사탕 담기와 같은 방식이다. */
+const 그림배 = 2;
 const W = cv.width, H = cv.height;
+cv.width = W * 그림배;
+cv.height = H * 그림배;
+cv.style.width = W + "px";
+cv.style.height = H + "px";
+ctx.setTransform(그림배, 0, 0, 그림배, 0, 0);
+ctx.imageSmoothingQuality = "high";   // 큰 그림을 줄여 그릴 때 테두리가 깨지지 않게
 // 층 높이는 캔버스 안에 15층이 다 들어가도록 잡는다.
 // 돌 그림이 들어가면서 13px 로는 돌처럼 안 보여 20px 로 키웠다.
 // 캔버스를 620 → 768 로 키우면서 안의 모든 값을 같은 수로 곱했다.
@@ -128,59 +140,38 @@ const BH = 20 * SCALE;           // 한 층 높이 24.8
 const BASE_Y = H - 24 * SCALE;   // 바닥
 const VIEW_ROWS = 15;            // 화면에 보이는 층 수 (넘으면 아래로 내려간다)
 
-// 돌 그림. 폭이 깎여도 같은 그림을 가로로 줄여 쓴다.
-const stoneImg = new Image();
-let stoneReady = false;
-stoneImg.onload = () => { stoneReady = true; draw(); };
-stoneImg.src = "assets/stack/stone.webp?v=192";
+// 케이크 한 단 그림. 폭이 깎여도 같은 그림을 가로로 줄여 쓴다.
+//
+// 예전에는 무채색 돌 한 장에 코드가 층마다 색을 갈아 끼웠다. 그러면 생크림까지 같은 색으로
+// 물들어 케이크가 아니라 색칠한 판처럼 보였다. 그래서 맛별로 색을 다 칠한 그림을 받아
+// 그대로 쓴다 (assets/_style/sweets-v1/stack/_요청서-2.md). 네 장은 크기·윤곽이 똑같아서
+// 어느 맛이든 판정 폭은 같다.
+const 맛그림 = {};
+const 맛색 = {                       // 그림이 오기 전 잠깐 보일 실루엣 색
+  바닐라: "#e9c98a", 딸기: "#f2a3b4", 초코: "#8a5a3c", 말차: "#a9c27a",
+};
+for (const [맛, 파일] of [["바닐라", "vanilla"], ["딸기", "strawberry"], ["초코", "chocolate"], ["말차", "matcha"]]) {
+  const im = new Image();
+  im.onload = () => draw();
+  im.src = "assets/stack/sweets-layer-" + 파일 + ".webp?v=210";
+  맛그림[맛] = im;
+}
+const 맛왔나 = (맛) => 맛그림[맛] && 맛그림[맛].complete && 맛그림[맛].naturalWidth > 0;
 
-/* 돌을 붉은 벽돌빛으로 물들인다.
+/* 층마다 맛을 고른다.
 
-   돌 그림은 한 장뿐이라 그대로 쌓으면 같은 벽돌이 열네 번 반복돼 보인다.
-   층마다 색을 조금씩 달리하면 진짜 쌓아 올린 담벼락처럼 보인다.
-
-   곱셈(multiply)으로 얹으면 원본보다 밝아질 수가 없어서 팥죽색이 된다.
-   원본 베이지가 169 인데 벽돌은 230 쯤 되어야 하기 때문이다.
-   그래서 "color" 로 얹는다 — 색은 새로 입히고 밝기는 원본 무늬를 그대로 쓴다.
-   얹고 나면 알파가 사각형으로 번지므로 원본 알파로 다시 오려낸다. */
-const 물든돌 = {};                  // 색 → 물들인 그림. 같은 색은 다시 안 만든다
-
-/* 벽돌 색은 몇 가지 중에서 뽑는다.
-
-   매번 새로 만들면 열네 층이 전부 다른 색이 되어 알록달록해진다.
-   진짜 담벼락은 대부분 같은 색이고 사이사이 조금 다른 것이 섞여 있다.
-   그래서 바탕색을 여러 번 넣어 자주 걸리게 하고, 나머지를 가끔 섞는다. */
-const 벽돌색들 = [
-  "hsl(12,72%,56%)",   // 바탕
-  "hsl(12,72%,56%)",
-  "hsl(12,72%,56%)",
-  "hsl(14,66%,62%)",   // 조금 밝은 것
-  "hsl(9,64%,48%)",    // 조금 어두운 것
-  "hsl(18,60%,59%)",   // 주황기가 도는 것
-];
+   매번 아무거나 뽑으면 열네 단이 전부 다른 맛이 되어 알록달록해진다.
+   바닐라·딸기를 자주, 초코·말차를 가끔 섞어 진짜 여러 단 케이크처럼 보이게 한다.
+   (예전 이름 "벽돌색" 을 그대로 쓴다 — 부르는 자리가 여럿이라 이름만 바꾸면 놓치기 쉽다) */
+const 벽돌색들 = ["바닐라", "바닐라", "딸기", "딸기", "초코", "말차"];
 
 function 벽돌색() {
   return 벽돌색들[Math.floor(Math.random() * 벽돌색들.length)];
 }
 
-function 물들이기(색) {
-  if (물든돌[색]) return 물든돌[색];
-  const c = document.createElement("canvas");
-  c.width = stoneImg.naturalWidth || 216;
-  c.height = stoneImg.naturalHeight || 80;
-  const x = c.getContext("2d");
-  x.drawImage(stoneImg, 0, 0);
-  x.globalCompositeOperation = "color";            // 색만 갈아 끼우고 밝기는 유지
-  x.fillStyle = 색;
-  x.fillRect(0, 0, c.width, c.height);
-  // 원본이 베이지라 "color" 만으로는 채도가 옅다. 한 번 더 얹어 벽돌빛을 낸다.
-  x.globalCompositeOperation = "saturation";
-  x.fillStyle = 색;
-  x.fillRect(0, 0, c.width, c.height);
-  x.globalCompositeOperation = "destination-in";   // 원본 알파로 다시 오려낸다
-  x.drawImage(stoneImg, 0, 0);
-  물든돌[색] = c;
-  return c;
+// 맛에 맞는 그림. 아직 안 왔으면 null — drawStone 이 실루엣으로 대신 그린다
+function 물들이기(맛) {
+  return 맛왔나(맛) ? 맛그림[맛] : null;
 }
 
 let state = "ready";             // ready | running | done
@@ -337,14 +328,14 @@ function finish(ok, why) {
 // 돌 한 장을 그 층의 폭에 맞춰 늘려 그린다.
 // 깎여 좁아진 돌도 같은 그림을 쓰므로 탑이 한 덩어리로 보인다.
 function drawStone(x, y, w, dim, 색) {
-  if (!stoneReady) {                       // 그림이 아직이면 실루엣이라도
-    ctx.fillStyle = 색 || "#c0503a";
+  if (!물들이기(색)) {                     // 그림이 아직이면 실루엣이라도
+    ctx.fillStyle = 맛색[색] || "#e9c98a";
     roundRect(x, y, w, BH - 2 * SCALE, 4 * SCALE); ctx.fill();
     return;
   }
   ctx.save();
   if (dim) ctx.globalAlpha = 0.92;
-  ctx.drawImage(색 ? 물들이기(색) : stoneImg, x, y, w, BH);
+  ctx.drawImage(물들이기(색), x, y, w, BH);
   ctx.restore();
 }
 
@@ -357,7 +348,7 @@ function draw() {
   // 돌빛이 흙길 색과 비슷해 묻힌다. 뒤에 옅은 판을 깔아 띄운다.
   // 돌이 오가는 가로 전체 × 바닥에서 목표선 살짝 위까지만 덮는다.
   const panelTop = goalY - 16 * SCALE;
-  ctx.fillStyle = "rgba(28, 32, 26, .30)";
+  ctx.fillStyle = "rgba(255, 248, 242, .30)";   // 과자 왕국: 밝은 반투명 판
   roundRect(0, panelTop, W, BASE_Y + 10 * SCALE - panelTop, 16 * SCALE);
   ctx.fill();
   // 목표선은 하늘색으로. 흰색이면 돌빛·흙길과 섞여 그냥 무늬처럼 보인다.

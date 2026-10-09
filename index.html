@@ -9,7 +9,7 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>밤가네 미니게임</title>
-<link rel="stylesheet" href="common.css?v=192">
+<link rel="stylesheet" href="common.css?v=210">
 <style>
   /* 무대는 잘라 내기만 하고 스크롤이 없다. 목록은 게임이 늘수록 길어지므로
      이 칸만 굴러가게 해 둔다. 아래쪽에 여백을 둬야 마지막 줄이 바닥에 붙지 않는다. */
@@ -131,6 +131,65 @@
   .reset:hover { color: #fff; background: rgba(255,255,255,.1);
                  border-color: rgba(255,255,255,.3); }
   .reset[hidden] { display: none; }
+
+  /* ── 과자 왕국 테마 (홈화면) ─────────────────────────────────
+     시안 A(과자 왕국 광장)로 정했다 — assets/_style/sweets-v1/hub/mock-A.png.
+     사용자 조정 (2026-10-09): 안내 문구는 그대로, 플레이 표시와 카드 테두리는 게임마다 다른 색을 빼고
+     **분홍 하나로 통일**. 그래서 카드에 게임별 색(--accent-1/2)을 물들이던 tinted 층을 끈다.
+     배경 그림: assets/_hub/hub-bg.webp (왕관 축제 광장). 화면 장식만 바꾼다 — 목록·모드·랜덤 동작은 그대로. */
+  .stage { background: url('assets/_hub/hub-bg.webp?v=210') center / cover no-repeat; }
+  .stage::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+                   background: linear-gradient(180deg, rgba(255,240,246,.55), rgba(255,240,246,.25) 40%,
+                                                       rgba(120,50,80,.25)); }
+  .hub { --pink: #f2668f; --pink-soft: #f6b9cd; --plum: #5b2f42; }
+  .hub::-webkit-scrollbar-thumb { background: rgba(194,65,111,.35); background-clip: content-box; }
+  .hub::-webkit-scrollbar-thumb:hover { background: rgba(194,65,111,.55); background-clip: content-box; }
+
+  /* 제목 — 리본 현수막 */
+  .hub h1 { padding: 10px 56px 12px; color: #fff; font-weight: 900;
+            background: linear-gradient(#ff8fb3, var(--pink)); border-radius: 14px;
+            box-shadow: 0 6px 0 #c84874, 0 14px 24px -10px rgba(120,30,60,.6);
+            text-shadow: 0 2px 0 #c84874; }
+  .hub .lead { margin-top: 14px; padding: 3px 14px; font-weight: 700; color: #7a3954;
+               background: rgba(255,255,255,.82); border-radius: 999px; }
+
+  /* 모드 토글 · 소리 단추 */
+  .hub .modes { background: rgba(255,255,255,.88); border: 2px solid var(--pink-soft); border-radius: 999px; }
+  .hub .modes button { color: #b45a7d; border-radius: 999px; font-weight: 800; }
+  .hub .modes button:hover { color: var(--pink); }
+  .hub .modes button.on { color: #fff; background: var(--pink); box-shadow: 0 6px 14px -8px rgba(160,40,80,.7); }
+  .hub .modes button.on:hover { color: #fff; }
+  .hub .mute { background: rgba(255,255,255,.88); border: 2px solid var(--pink-soft); color: #c2416f; }
+  .hub .mute:hover { background: #fff; color: var(--pink); }
+  .hub .mute.off { color: #c9a3b2; }
+
+  .hub .note { color: #7a3954; text-shadow: 0 1px 0 rgba(255,255,255,.8); font-weight: 700; }
+  .hub .note b { color: #c2416f; }
+  .hub .reset { color: #b45a7d; background: rgba(255,255,255,.88); border: 2px solid var(--pink-soft); border-radius: 999px; }
+  .hub .reset:hover { color: var(--pink); background: #fff; border-color: var(--pink); }
+
+  /* 게임 카드 — 크림색 쿠키 카드, 테두리는 분홍 하나 */
+  .hub .game.card { background: rgba(255,251,247,.95); border: 3px solid var(--pink-soft); border-radius: 22px;
+                    color: var(--plum); box-shadow: 0 10px 18px -10px rgba(120,40,70,.55); }
+  .hub .game.card.tinted::before { display: none; }
+  .hub .game:hover { border-color: var(--pink); }
+  .hub .game .tile { width: 58px; height: 58px; }
+  .hub .game .tile.pic { border-radius: 15px; }
+  .hub .game .name { margin-top: 8px; font-weight: 800; color: var(--plum); }
+  /* 플레이 표시 — 분홍 알약 하나로 통일 */
+  .hub .game .go { margin-top: 6px; padding: 2px 13px 3px; border-radius: 999px;
+                   font-weight: 700; color: #fff; background: var(--pink); }
+  .hub .game.soon .go { background: #cdb7c0; color: #fff; }
+  .hub .game.soon:hover { border-color: var(--pink-soft); }
+  .hub .grid.rand .game.cleared .go { background: #cdb7c0; color: #fff; }
+  .hub .grid.rand .game.cleared .go::after { color: #fff; }
+
+  /* 랜덤 룰렛 — 짚고 있는 카드는 분홍 빛, 걸린 카드는 진한 분홍 테두리 */
+  .hub .game.spot { border-color: #fff;
+                    box-shadow: 0 0 0 4px var(--pink), 0 0 22px rgba(242,102,143,.85); }
+  .hub .game.won { border-color: var(--pink); }
+
+  #ver { color: #7a3954; opacity: .6; }
 </style>
 </head>
 <body>
@@ -150,8 +209,8 @@
   </div>
 </div></div>
 
-<script src="common.js?v=192"></script>
-<script src="sound.js?v=192"></script>
+<script src="common.js?v=210"></script>
+<script src="sound.js?v=210"></script>
 <script>
 "use strict";
 
@@ -160,18 +219,18 @@
 // img 가 있으면 그 그림을 타일에 꽉 채워 넣고, 없으면 icon 의 선 그림을 쓴다.
 // 2D 로 바꾼 게임부터 하나씩 그림을 붙여 나간다.
 const GAMES = [
-  { file: "ricecut.html",   name: "떡 자르기",       c1: "#ec4899", c2: "#e11d48", icon: "knife",
-    img: "assets/_icons/ricecut.webp?v=192" },
-  { file: "curling.html",   name: "조약돌 밀기",     c1: "#f59e0b", c2: "#ea580c", icon: "target",
-    img: "assets/_icons/curling.webp?v=192" },
-  { file: "stack.html",     name: "돌탑 쌓기",       c1: "#0ea5e9", c2: "#4f46e5", icon: "stack",
-    img: "assets/_icons/stack.webp?v=192" },
-  { file: "oddone.html",    name: "콩 고르기",       c1: "#14b8a6", c2: "#0d9488", icon: "odd",
-    img: "assets/_icons/oddone.webp?v=192" },
-  { file: "fill.html",      name: "떡 담기",         c1: "#fb7185", c2: "#e11d48", icon: "basket",
-    img: "assets/_icons/fill.webp?v=192" },
-  { file: "tower.html",     name: "삼색떡 해체",    c1: "#34d399", c2: "#059669", icon: "tower",
-    img: "assets/_icons/tower.webp?v=192" },
+  { file: "ricecut.html",   name: "롤케이크 자르기",       c1: "#ec4899", c2: "#e11d48", icon: "knife",
+    img: "assets/_icons/ricecut-sweets.webp?v=210" },
+  { file: "curling.html",   name: "마카롱 컬링",     c1: "#f59e0b", c2: "#ea580c", icon: "target",
+    img: "assets/_icons/curling-sweets.webp?v=210" },
+  { file: "stack.html",     name: "케이크 층 쌓기",       c1: "#0ea5e9", c2: "#4f46e5", icon: "stack",
+    img: "assets/_icons/stack-sweets.webp?v=210" },
+  { file: "oddone.html",    name: "젤리빈 고르기",       c1: "#14b8a6", c2: "#0d9488", icon: "odd",
+    img: "assets/_icons/oddone-sweets.webp?v=210" },
+  { file: "fill.html",      name: "사탕 담기",       c1: "#fb7185", c2: "#e11d48", icon: "basket",
+    img: "assets/_icons/fill-candy.webp?v=210" },
+  { file: "tower.html",     name: "마카롱 탑 해체",    c1: "#34d399", c2: "#059669", icon: "tower",
+    img: "assets/_icons/tower-sweets.webp?v=210" },
 ];
 
 // 아이콘은 선으로만 그린다. 배경 타일 색이 게임을 구분해 준다.
@@ -209,6 +268,8 @@ const ICONS = {
   // 장대와 떨어지는 감
   pole:  '<path d="M4 20L16 6"/><circle cx="18" cy="5" r="2.6"/>'
        + '<circle cx="11" cy="16" r="2.2"/><circle cx="6" cy="12" r="1.8"/>',
+  // 베개 — 솜이 든 둥근 네모와 바느질 선
+  pillow:'<rect x="3" y="7" width="18" height="10" rx="4"/><path d="M7 7v10M17 7v10"/>',
   // 장독 항아리 — 두드려 소리를 듣는다
   jar:   '<path d="M8 6h8l1.5 3c1.5 2 1.5 8 0 10H6.5c-1.5-2-1.5-8 0-10z"/>'
        + '<path d="M6 6h12"/>',

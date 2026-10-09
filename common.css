@@ -444,3 +444,44 @@ html, body {
   .fx { display: none; }
 }
 
+
+/* ── 과자 왕국 테마 ─────────────────────────────────────────────
+   <body class="theme-sweets"> 를 단 게임에만 걸린다. 아직 한옥인 게임은 그대로다.
+   그림체 기준은 assets/_style/sweets-v1/_그림체.md.
+
+   배경이 밝은 파스텔이라 한옥 때는 없던 문제가 생긴다.
+   ① 흰 안내 글씨가 밝은 바닥에 묻힌다   → 글줄 뒤에 자두빛 반투명 받침
+   ② 짙은 남색 규칙 카드가 혼자 떠 보인다 → 크림빛 카드에 갈색 글씨
+   ③ 한옥 배경을 누르던 갈색 덧칠이 파스텔을 탁하게 만든다 → 자두빛으로 옅게
+   여기 한 곳에서 정해 두어야 게임마다 받침 색이 달라지는 일이 없다.
+   화면 장식만 바꾼다. 판정·규칙과는 상관이 없다. */
+body.theme-sweets .topbar {
+  background: rgba(110, 46, 78, .42);
+  border-bottom-color: rgba(255, 255, 255, .18);
+}
+body.theme-sweets .stage::before {
+  background: linear-gradient(180deg, rgba(70,24,48,.10) 0%, rgba(70,24,48,0) 26%,
+                                      rgba(70,24,48,.06) 62%, rgba(70,24,48,.30) 100%);
+}
+/* 안내줄 받침. 글자 폭만큼만 깔리도록 width: fit-content + 좌우 margin auto.
+   비어 있을 때는 받침만 숨긴다 — 자리를 없애면 글이 생길 때 아래 버튼이 덜컥 밀린다. */
+body.theme-sweets .status,
+body.theme-sweets .ratio {
+  color: #f6e3ee;
+  text-shadow: 0 2px 6px rgba(40, 10, 26, .55);
+  width: fit-content; margin-left: auto; margin-right: auto;
+  padding: 2px 18px 4px;
+  background: rgba(92, 34, 64, .62); border-radius: 999px;
+  box-shadow: 0 6px 18px -8px rgba(40, 10, 26, .7);
+}
+body.theme-sweets .status:empty,
+body.theme-sweets .ratio:empty { background: transparent; box-shadow: none; }
+body.theme-sweets .rules.card {
+  background: rgba(255, 249, 251, .90); border-color: #f4c2d4;
+}
+body.theme-sweets .rules h2 { color: #c2416f; }
+body.theme-sweets .rules li { color: #5b3a47; word-break: keep-all; }
+body.theme-sweets .rules li::before { color: #d98aa8; }
+body.theme-sweets .rules li:has(b),
+body.theme-sweets .rules li:has(b)::before,
+body.theme-sweets .rules li b { color: #15924f; }
