@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="cache-control" content="no-cache">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
+<title>웨하스 시소타기</title>
+<link rel="stylesheet" href="common.css?v=245">
+<script src="common.js?v=245"></script>
+<script src="sound.js?v=245"></script>
+<style>
+  :root { --accent-1: #a78bfa; --accent-2: #7c3aed; }
+
+  /* 과자 왕국 하늘 높은 곳 — 저 아래 민트 소다 바다 */
+  .stage { background: #bcd8f6 url('assets/seesaw/bg.webp?v=245') center / cover no-repeat; }
+  .body { z-index: 1; }
+
+  .board { width: 100%; display: grid; justify-items: center;
+           grid-template-rows: var(--play-h) 30px auto; align-content: center;
+           position: relative; }
+  .arena { position: relative; order: 1; width: var(--play-w); height: var(--play-h);
+           user-select: none; -webkit-user-select: none; touch-action: none; }
+  .status   { order: 2; align-self: center; }
+  .controls { text-align: center; order: 3; }
+  .slot { position: absolute; left: 50%; top: calc(var(--play-h) / 2);
+          transform: translate(-50%, -50%); z-index: 4;
+          display: grid; place-items: center; pointer-events: none; }
+  canvas { display: block; position: absolute; left: 0; top: 0; }
+
+  .status { font-size: 15px; letter-spacing: .3px; }
+  .status b { color: #fff; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .verdict .sub { display: none; }
+  .btn.playing::after { content: none; }      /* 하는 중엔 스페이스가 대시라 (space) 안내를 감춘다 */
+  .rules li { font-size: 12px; }
+</style>
+</head>
+<body class="theme-sweets">
+<div id="fit"><div class="stage">
+
+  <div class="topbar">
+    <a class="back" href="index.html" title="목록으로">←</a>
+    <div class="tile sm pic"><img src="assets/_icons/seesaw-sweets.webp?v=245" alt=""></div>
+    <div class="titles">
+      <h1>웨하스 시소타기</h1>
+      <p>Sky Seesaw</p>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="play">
+      <div class="board">
+        <div class="arena playslot" id="arena">
+          <canvas id="cv" width="768" height="432"></canvas>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="slot" id="slot"></div>
+        <div class="controls">
+          <button class="btn" id="go">도 전</button>
+          <div class="hint">A·D 이동 / 스페이스 대시</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rules card">
+      <h2>규칙</h2>
+      <ul>
+        <li>A·D (←→) 이동 · 스페이스 대시</li>
+        <li>젤리곰 쪽으로 시소가 기울어 미끄러집니다</li>
+        <li><b>[성공기준]</b> 30초 동안 떨어지지 않기</li>
+      </ul>
+    </aside>
+  </div>
+
+</div></div>
+
+<script>
+"use strict";
+
+/* ── 엔진 시작 ──────────────────────────────────────────────────
+   화면·소리와 떨어진 규칙 덩어리다. 시간(초)만 받아 상태를 바꾼다.
+   시뮬레이션이 이 구간만 잘라 그대로 돌리므로 DOM 을 건드리지 않는다. 1/240초 칸으로 흐른다.
+
+     시소가 가려는 기울기 = 곰무게·곰자리 + 공주무게·공주자리 (+ 흔들기)
+     시소 각가속도      = 따라감·(가려는 기울기 − 각) − 감쇠·각속도
+     공주 미끄럼        += 미끄럼·sin(각) (마찰로 줄어든다)
+     공주 자리          += (걷기 + 미끄럼 + 대시) · 시간
+
+   곰 상태: 쉼 → 걷기(아무 데로 천천히) 또는 예고(씨익) → 돌진 · 속임 · 흔들기 → 쉼 */
+function 시소판(R, 난수) {
+  const 무작위 = 난수 || Math.random;
+  const 뽑기 = (a, b) => a + (b - a) * 무작위();
+  const 칸 = 1 / 240;
+  const g = {
+    t: 0, t0: 0, 끝: null,                     // 끝: null | "성공" | "떨어짐" | "포기"
+    각: 0, 각속도: 0,                           // 시소 (+ 는 오른쪽이 내려감)
+    x: 0, 미끄럼: 0, 방향: 0, 보는쪽: 1,        // 공주 자리(-1~1) · 미끄러지는 빠르기 · 입력 · 바라보는 쪽
+    대시끝: -9, 대시쪽: 1, 대시가능: 0,
+    곰: { 상태: "쉼", 시작: 0, 끝: 0, 자리: 0.5, 목표: 0.5, 목표2: null, 종류: "", 쪽: 1, 빠르기배: 1 },
+    바람: { 상태: "잠잠", 시작: 0, 끝: 0, 쪽: 1 },
+    젤리: null,                                 // 날아가는 젤리 {시작, 끝, 출발, 도착}
+    웅덩이: [],                                 // 시소 위 젤리 웅덩이 {가운데, 끝}
+    별: null, 다음별: 9e9, 기절끝: -9,          // 막판 별사탕 {시작, 끝(떨어지는 때), 자리} · 기절이 풀리는 때
+    소식: [],
+  };
+  // 구간: 0~10초 익히기 · 10~20초 본게임 · 20~30초 막판
+  const 단계 = () => { const 지난 = g.t - g.t0; return 지난 < R.구간[0] ? 0 : 지난 < R.구간[1] ? 1 : 2; };
+  const 알림 = (t, 일, 덧) => g.소식.push(Object.assign({ t, 일 }, 덧));
+  const 막판 = () => R.막판시작 != null && g.t - g.t0 >= R.막판시작;
+  // 막판: 끝에 닿자마자 젤리를 던지고(던지는 중이면 건너뜀) → 아주 잠깐 숨 고르기(막판쉼) → 짧은 예고 → 반대쪽 끝으로 돌진
+  function 막판다음(t) {
+    const c = g.곰, 반대 = c.자리 >= 0 ? -1 : 1;
+    if (!c.막판던짐 && !g.젤리) {
+      const 도착 = Math.max(-0.85, Math.min(0.85, g.x + 뽑기(-0.15, 0.15)));
+      g.젤리 = { 시작: t, 끝: t + R.젤리날기초, 출발: c.자리, 도착 };
+      곰바꿈("던지기", R.막판던지기초, t, { 막판던짐: true }); 알림(t, "곰던지기");
+      return;
+    }
+    if (c.상태 === "던지기" && R.막판쉼) { 곰바꿈("쉼", R.막판쉼, t, { 막판던짐: true }); return; }   // 던지고 아주 잠깐 숨 고르기
+    곰바꿈("예고", R.막판예고초, t, { 종류: "돌진", 쪽: 반대, 목표: 반대 * R.곰끝, 목표2: null, 막판던짐: false });
+    알림(t, "곰예고", { 종류: "돌진" });
+  }
+  function 곰바꿈(상태, 길이, t, 덧) { Object.assign(g.곰, { 상태, 시작: t, 끝: t + 길이 }, 덧 || {}); }
+
+  // 3구간 광란: 끝에서 잠깐 머문 뒤 짧은 예고 → 끝↔끝 돌진. 어디로 언제 갈지 매번 다르다
+  function 광란다음(t) {
+    const c = g.곰, 반대 = c.자리 >= 0 ? -1 : 1, r = 무작위();
+    let 종류 = "돌진", 목표 = 반대 * R.곰끝;
+    if (r < R.광란속임몫) { 종류 = "속임"; 목표 = c.자리; }
+    else if (r < R.광란속임몫 + R.광란던지기몫) { 종류 = "던지기"; 목표 = c.자리; }
+    else if (무작위() < R.광란같은쪽몫) {
+      // 같은 쪽 끝에서 한 번 더 버틴다 — 이미 끝이면 예고 없이 조금 더 머문다
+      if (Math.abs(c.자리) > 0.8) { 곰바꿈("쉼", 뽑기(R.쉼최소[2], R.쉼최대[2]), t); return; }
+      목표 = -반대 * R.곰끝;
+    }
+    곰바꿈("예고", R.예고초[2], t, { 종류, 쪽: 반대, 목표, 목표2: null });
+    알림(t, "곰예고", { 종류 });
+  }
+
+  function 곰다음(t) {
+    const k = 단계(), c = g.곰;
+    if (막판() && c.상태 !== "예고") { 막판다음(t); return; }
+    if (c.상태 === "쉼" && k === 2) { 광란다음(t); return; }
+    if (c.상태 === "쉼") {
+      if (무작위() < R.장난비율[k]) {
+        const r = 무작위();
+        const 종류 = r < R.속임몫 ? "속임" : r < R.속임몫 + R.흔들기몫 ? "흔들기"
+                   : r < R.속임몫 + R.흔들기몫 + R.던지기몫[k] ? "던지기" : "돌진";
+        // 돌진 목적지는 예고 때 몰래 정해 둔다. 늘 같으면 외워서 풀린다
+        const 반대 = c.자리 >= 0 ? -1 : 1, r2 = 무작위();
+        let 목표 = 반대 * R.곰끝, 목표2 = null;
+        if (r2 < R.반대끝몫) { /* 반대쪽 끝 */ }
+        else if (r2 < R.반대끝몫 + R.멈칫몫) 목표 = 반대 * 뽑기(0.05, 0.25);                       // 가운데서 멈칫
+        else if (r2 < R.반대끝몫 + R.멈칫몫 + R.되돌기몫) { 목표 = 반대 * 0.45; 목표2 = -반대 * R.곰끝; }  // 갔다가 되돌아오기
+        else if (Math.abs(c.자리) < 0.7) 목표 = -반대 * R.곰끝;                                    // 같은 쪽 끝으로 더 깊이
+        곰바꿈("예고", R.예고초[k], t, { 종류, 쪽: 반대, 목표, 목표2 });
+        알림(t, "곰예고", { 종류 });
+      } else {
+        // 가끔은 공주가 서 있는 쪽으로 간다 — 공주 쪽이 내리막이 된다
+        const 목표 = 무작위() < R.노림비율[k] ? (Math.sign(g.x) || 1) * 뽑기(0.45, R.곰끝) : 뽑기(-R.곰끝, R.곰끝);
+        const 빠르기배 = 무작위() < R.빨라짐몫 ? 뽑기(1.2, R.빨라짐최대) : 1;
+        곰바꿈("걷기", 99, t, { 목표, 목표2: null, 빠르기배 });
+      }
+    } else if (c.상태 === "예고") {
+      if (c.종류 === "돌진") { 곰바꿈("돌진", 99, t); 알림(t, "곰돌진", { 쪽: Math.sign(c.목표 - c.자리) || c.쪽 }); }
+      else if (c.종류 === "흔들기") { 곰바꿈("흔들기", R.흔들기초, t); 알림(t, "곰흔들기"); }
+      else if (c.종류 === "던지기") {
+        // 공주가 서 있는 근처를 노린다 (조금 빗나가게)
+        const 도착 = Math.max(-0.85, Math.min(0.85, g.x + 뽑기(-0.15, 0.15)));
+        g.젤리 = { 시작: t, 끝: t + R.젤리날기초, 출발: c.자리, 도착 };
+        곰바꿈("던지기", 0.45, t); 알림(t, "곰던지기");
+      }
+      else { 곰바꿈("속임", 0.45, t); 알림(t, "곰속임"); }
+    } else {
+      곰바꿈("쉼", 뽑기(R.쉼최소[k], R.쉼최대[k]), t);
+    }
+  }
+
+  function 한칸(t) {
+    g.t = t;
+    const k = 단계(), c = g.곰;
+    // 3구간: 곰이 가운데에 오래 머물지 못하게 — 곧바로 끝으로 돌진 (짧은 예고는 준다)
+    if (k === 2 && (c.상태 === "쉼" || c.상태 === "걷기") && Math.abs(c.자리) < 0.3) {
+      c.가운데 = (c.가운데 || 0) + 칸;
+      if (c.가운데 >= R.가운데최대) {
+        c.가운데 = 0;
+        const 쪽 = 무작위() < 0.5 ? -1 : 1;
+        곰바꿈("예고", R.예고초[2], t, { 종류: "돌진", 쪽, 목표: 쪽 * R.곰끝, 목표2: null });
+        알림(t, "곰예고", { 종류: "돌진" });
+      }
+    } else c.가운데 = 0;
+
+    // 막판이 시작되면 쉬던 곰도 곧바로 움직인다 (앞 구간의 쉼이 막판까지 이어지지 않게) — 들어서는 순간 한 번
+    if (막판() && !c.막판들어섬) { c.막판들어섬 = true; if (c.상태 === "쉼" || c.상태 === "걷기") 곰다음(t); }
+    // 곰 옮겨 다니기
+    if (c.상태 === "걷기" || c.상태 === "돌진") {
+      const 빠르기 = c.상태 === "돌진" ? R.곰돌진[k] : R.곰걷기[k] * c.빠르기배;
+      const d = c.목표 - c.자리;
+      if (Math.abs(d) <= 빠르기 * 칸) {
+        c.자리 = c.목표;
+        if (c.상태 === "돌진" && c.목표2 != null) { c.목표 = c.목표2; c.목표2 = null; 알림(t, "곰되돌기"); }   // 2단 돌진
+        else 곰다음(t);
+      }
+      else c.자리 += Math.sign(d) * 빠르기 * 칸;
+    } else if (c.끝 <= t) 곰다음(t);
+
+    // 날아간 젤리가 떨어지면 웅덩이. 오래된 웅덩이는 녹아 없어진다
+    if (g.젤리 && g.젤리.끝 <= t) {
+      g.웅덩이.push({ 가운데: g.젤리.도착, 끝: t + R.웅덩이초 });
+      if (g.웅덩이.length > (막판() ? R.막판웅덩이최대 : R.웅덩이최대)) g.웅덩이.shift();
+      알림(t, "젤리철퍽", { 자리: g.젤리.도착 });
+      g.젤리 = null;
+    }
+    if (g.웅덩이.length && g.웅덩이[0].끝 <= t) g.웅덩이.shift();
+    const 웅덩이위 = g.웅덩이.some((u) => Math.abs(g.x - u.가운데) < R.웅덩이반폭);
+
+    // 돌풍
+    const w = g.바람;
+    if (w.끝 <= t) {
+      if (w.상태 === "잠잠") { Object.assign(w, { 상태: "예고", 시작: t, 끝: t + R.바람예고초, 쪽: 무작위() < 0.5 ? -1 : 1 }); 알림(t, "바람예고", { 쪽: w.쪽 }); }
+      else if (w.상태 === "예고") { Object.assign(w, { 상태: "붐", 시작: t, 끝: t + R.바람초 }); 알림(t, "바람", { 쪽: w.쪽 }); }
+      else Object.assign(w, { 상태: "잠잠", 시작: t, 끝: t + (막판() ? 뽑기(R.막판바람간격[0], R.막판바람간격[1]) : 뽑기(R.바람간격최소[k], R.바람간격최대[k])) });
+    }
+
+    // 별사탕 (막판 마지막) — 반짝 예고 뒤 떨어진다. 맞으면 기절. 한 번에 하나, 기절이 풀린 뒤 1초 안엔 안 떨어진다
+    if (!g.별 && t >= g.다음별) {
+      const 자리 = 무작위() < R.별겨눔몫 ? Math.max(-0.9, Math.min(0.9, g.x + 뽑기(-0.15, 0.15))) : 뽑기(-0.9, 0.9);
+      g.별 = { 시작: t, 끝: t + R.별예고, 자리 };
+      알림(t, "별예고", { 자리 });
+    } else if (g.별 && t >= g.별.끝) {
+      const 맞음 = Math.abs(g.x - g.별.자리) < R.별반폭;
+      if (맞음) { g.기절끝 = t + R.기절초; g.대시끝 = Math.min(g.대시끝, t); 알림(t, "기절"); }
+      알림(t, "별", { 자리: g.별.자리, 맞음 });
+      g.별 = null;
+      g.다음별 = Math.max(t + R.별간격 - R.별예고, 맞음 ? g.기절끝 + R.기절뒤쉼 - R.별예고 : 0);
+    }
+    const 기절 = t < g.기절끝;
+
+    // 시소
+    let 목표각 = R.곰무게 * c.자리 + R.공주무게 * g.x;
+    if (c.상태 === "흔들기") 목표각 += R.흔들기폭[k] * Math.sin(2 * Math.PI * R.흔들기빠르기 * (t - c.시작));
+    목표각 = Math.max(-R.최대각, Math.min(R.최대각, 목표각));
+    g.각속도 += (R.따라감 * (목표각 - g.각) - R.감쇠 * g.각속도) * 칸;
+    g.각 += g.각속도 * 칸;
+
+    // 공주
+    g.미끄럼 += (R.미끄럼[k] * Math.sin(g.각) + (w.상태 === "붐" ? w.쪽 * R.바람세기[k] : 0)) * 칸;
+    g.미끄럼 *= Math.exp(-R.마찰 * (웅덩이위 ? R.웅덩이마찰배 : 1) * 칸);
+    const 대시 = t < g.대시끝 ? g.대시쪽 * R.대시속도 : 0;
+    g.x += ((기절 ? 0 : g.방향) * R.걷기속도 * (웅덩이위 ? R.웅덩이걷기배 : 1) + g.미끄럼 + 대시) * 칸;   // 기절 중엔 못 걷는다
+    g.웅덩이위 = 웅덩이위;
+
+    if (Math.abs(g.x) > 1) { g.끝 = "떨어짐"; 알림(t, "끝"); }
+    else if (t - g.t0 >= R.버틸초) { g.끝 = "성공"; 알림(t, "끝"); }
+  }
+
+  function 진행(t) { while (!g.끝 && g.t + 칸 <= t + 1e-9) 한칸(g.t + 칸); }
+
+  // 종류: "방향"(값 -1·0·+1) · "대시"
+  function 입력(종류, t, 값) {
+    진행(t);
+    if (g.끝) return false;
+    if (종류 === "방향") { g.방향 = 값; if (값) g.보는쪽 = 값; return true; }
+    if (종류 === "대시") {
+      if (g.t < g.대시가능 || g.t < g.기절끝) return false;     // 기절 중엔 대시도 못 한다
+      g.대시쪽 = g.방향 || g.보는쪽;
+      g.대시끝 = g.t + R.대시초;
+      g.대시쿨길이 = R.대시쿨[단계()];
+      g.대시가능 = g.t + g.대시쿨길이;
+      // 박차고 나가는 순간 미끄러지던 기세가 끊긴다 — 대시가 "되찾기" 수단이 되게
+      if (Math.sign(g.미끄럼) !== g.대시쪽) g.미끄럼 = 0;
+      알림(g.t, "대시");
+      return true;
+    }
+    return false;
+  }
+
+  function 시작(t) {
+    g.t = g.t0 = t;
+    g.x = -0.3; g.보는쪽 = 1;
+    g.곰.자리 = 0.5;
+    g.각 = R.곰무게 * 0.5 + R.공주무게 * g.x;
+    곰바꿈("쉼", 1.5, t);
+    Object.assign(g.바람, { 상태: "잠잠", 시작: t, 끝: t + R.바람첫 });
+    g.별 = null; g.기절끝 = -9; g.다음별 = R.별시작 != null ? t + R.별시작 - R.별예고 : 9e9;   // 첫 별은 별시작초에 떨어진다
+  }
+
+  return { g, 시작, 진행, 입력 };
+}
+/* ── 엔진 끝 ── */
+
+const R = RULES.seesaw;
+const cv     = document.getElementById("cv");
+const ctx    = cv.getContext("2d");
+const status = document.getElementById("status");
+const slot   = document.getElementById("slot");
+const go     = document.getElementById("go");
+
+const 그림배 = 2;
+const W = cv.width, H = cv.height;
+cv.width = W * 그림배; cv.height = H * 그림배;
+cv.style.width = W + "px"; cv.style.height = H + "px";
+ctx.setTransform(그림배, 0, 0, 그림배, 0, 0);
+ctx.imageSmoothingQuality = "high";
+
+let 판상태 = "ready";       // ready | count(준비·시작!) | play | ending(떨어지거나 곰이 떨어지는 연출) | done
+let 카운트끝 = 0;
+let 떨어진x = W / 2;
+let 엔진 = null;
+let 읽은소식 = 0;
+let 끝시각 = 0;
+let 프레임dt = 0;
+const 지금 = () => performance.now() / 1000;
+const 눌린시각 = (ev) => (ev ? pressTime(ev) : performance.now()) / 1000;
+
+/* ── 그림 ──────────────────────────────────────────────────────
+   assets/_style/sweets-v1/seesaw/_요청서-*.md 로 받은 그림. 오지 않은 그림은 상자로 대신 그린다.
+   캐릭터 그림은 768×768, 오른쪽을 본다. 공주는 두 발 가운데가 (384, 730), 곰은 막대를 쥔 두 손 가운데가 (384, 70). */
+const 그림 = {};
+for (const n of ["balloon", "beam", "p-idle", "p-dash", "p-slip", "p-fall", "p-win",
+                 "p-walk1", "p-walk2", "p-walk3", "p-walk4",
+                 "b-hang", "b-move1", "b-move2", "b-grin", "b-fall", "p-dizzy", "star"]) {
+  const im = new Image();
+  im.src = "assets/seesaw/" + n + ".webp?v=245";
+  그림[n] = im;
+}
+const 있나 = (n) => 그림[n] && 그림[n].complete && 그림[n].naturalWidth > 0;
+
+/* ── 배치 ──────────────────────────────────────────────────────
+   열기구가 위에 떠 있고, 두 가닥 밧줄이 시소 가운데 고리를 잡고 있다.
+   시소 반 길이 300px = 자리 1. 공주 키 약 120px, 곰은 손에서 발까지 약 125px. */
+const 축 = { x: W / 2, y: 214 };
+const 반길이 = 300;
+const 공주배 = 120 / 560;
+const 곰배 = 125 / 600;
+
+function 둥근네모(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// 시소 위 자리 u(-1~1), 막대 가운데선에서 위로 '위' px 떨어진 점
+function 막대점(u, 각, 위) {
+  const c = Math.cos(각), s = Math.sin(각), d = u * 반길이;
+  return [축.x + d * c + 위 * s, 축.y + d * s - 위 * c];
+}
+
+function 열기구(t, 각) {
+  const 둥실 = Math.sin(t * 1.3) * 3;
+  const 바구니y = 145 + 둥실;
+  // 밧줄 — 바구니 밑에서 시소 고리까지
+  const 고리 = 막대점(0, 각, 18);
+  ctx.strokeStyle = "#b07a4a"; ctx.lineWidth = 2.5;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(W / 2 + s * 13, 바구니y - 4); ctx.lineTo(고리[0], 고리[1]); ctx.stroke(); }
+  if (있나("balloon")) ctx.drawImage(그림.balloon, W / 2 - 85, -18 + 둥실, 170, 170);
+  else { ctx.fillStyle = "#f6b9cd"; ctx.beginPath(); ctx.arc(W / 2, 50 + 둥실, 55, 0, Math.PI * 2); ctx.fill(); }
+}
+
+/* 젤리 웅덩이 — 시소 윗면에 붙어 같이 기운다. 말랑하게 출렁이고, 녹을 무렵 옅어진다 */
+function 웅덩이그리기(g, t, 각) {
+  if (!g) return;
+  for (const u of g.웅덩이) {
+    const 남 = u.끝 - (판상태 === "play" ? t : g.t);
+    const 투명 = Math.min(1, 남 / 0.8);
+    const 출렁 = 1 + Math.sin(t * 9 + u.가운데 * 7) * 0.05;
+    const [x, y] = 막대점(u.가운데, 각, 10);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(각); ctx.globalAlpha = 0.92 * 투명;
+    const 폭 = R.웅덩이반폭 * 반길이 * 출렁;
+    const 그라 = ctx.createLinearGradient(0, -9, 0, 3);
+    그라.addColorStop(0, "rgba(255,120,150,.95)"); 그라.addColorStop(1, "rgba(200,30,70,.95)");
+    ctx.fillStyle = 그라; ctx.strokeStyle = "rgba(140,20,50,.7)"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(0, -2, 폭, 7 / 출렁, 0, Math.PI, 0); ctx.lineTo(폭, 1); ctx.ellipse(0, 1, 폭, 3, 0, 0, Math.PI); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,.75)"; ctx.beginPath(); ctx.ellipse(-폭 * 0.35, -5, 폭 * 0.22, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    // 흘러내리는 방울 하나
+    ctx.fillStyle = "rgba(210,40,80,.9)"; ctx.beginPath(); ctx.ellipse(폭 * 0.5, 4 + Math.abs(Math.sin(t * 2 + u.가운데)) * 3, 2.5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* 날아가는 젤리 — 곰 손에서 포물선을 그리며 시소 위로 */
+function 젤리그리기(g, t, 각) {
+  const j = g && g.젤리;
+  if (!j || 판상태 !== "play") return;
+  const p = Math.max(0, Math.min(1, (t - j.시작) / (j.끝 - j.시작)));
+  const [x0, y0] = 막대점(j.출발, 각, -6);
+  const [x1, y1] = 막대점(j.도착, 각, 14);
+  const x = x0 + (x1 - x0) * p, y = y0 + 40 + (y1 - y0 - 40) * p - Math.sin(p * Math.PI) * 120;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(p * 8);
+  ctx.fillStyle = "rgba(225,45,85,.95)"; ctx.strokeStyle = "rgba(140,20,50,.8)"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(0, 0, 11, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.beginPath(); ctx.ellipse(-4, -3, 3.5, 2, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // 떨어질 자리 미리 보기 — 시소 위에 옅은 그림자
+  const [sx, sy] = 막대점(j.도착, 각, 10);
+  ctx.save(); ctx.translate(sx, sy); ctx.rotate(각); ctx.globalAlpha = 0.25 + 0.35 * p;
+  ctx.fillStyle = "rgba(160,20,60,.6)"; ctx.beginPath(); ctx.ellipse(0, 0, R.웅덩이반폭 * 반길이 * (0.4 + 0.6 * p), 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function 시소(각) {
+  ctx.save(); ctx.translate(축.x, 축.y); ctx.rotate(각);
+  if (있나("beam")) ctx.drawImage(그림.beam, -320, -37.5, 640, 60);
+  else { ctx.fillStyle = "#f1cf94"; ctx.strokeStyle = "#a8743c"; ctx.lineWidth = 3; 둥근네모(-300, -10, 600, 20, 6); ctx.fill(); ctx.stroke(); }
+  ctx.restore();
+}
+
+/* 그림마다 캐릭터가 그려진 크기가 조금씩 다르다. 대기 그림과 같은 크기로 보이게 맞추는 배율.
+   (몸이 차지하는 면적으로 쟀다 — 미끄러짐은 웅크린 자세를 그리면서 캐릭터를 64% 면적으로 작게 그려,
+    미끄러질 때마다 몸이 쪼그라드는 것처럼 보였다. 2026-10-10 사용자 지적) */
+const 장배율 = { "p-slip": 1.25, "p-fall": 1.10, "p-win": 1.07 };
+
+/* 캐릭터 한 장을 기준점에 맞춰 그린다. 보는쪽 -1 이면 좌우를 뒤집는다. */
+function 한장(n, x, y, 배, 기준x, 기준y, 보는쪽, 돌림) {
+  배 *= 장배율[n] || 1;
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(돌림 || 0);
+  if (보는쪽 < 0) ctx.scale(-1, 1);
+  ctx.drawImage(그림[n], -기준x * 배, -기준y * 배, 768 * 배, 768 * 배);
+  ctx.restore();
+}
+
+/* ── 움직임 ─────────────────────────────────────────────────────
+   걷기는 걸은 거리 20px 마다 한 장 (네 장이 두 걸음) — 발이 막대에서 미끄러지지 않게.
+   곰은 옮겨 간 거리 18px 마다 손을 바꿔 잡는다. 매달린 곰의 몸은 추처럼 흔들린다. */
+const 걸음 = { 앞: null, 누적: 0 };
+const 곰걸음 = { 앞: null, 누적: 0, 흔들: 0, 흔들속도: 0 };
+let 먼지 = [], 물보라 = [], 반짝 = [], 바람줄 = [];
+let 바람쌓임 = 0;
+
+function 공주장(g, t) {
+  if (t < g.기절끝) return 있나("p-dizzy") ? "p-dizzy" : "p-slip";   // 별사탕에 맞아 어질어질
+  if (t < g.대시끝) return "p-dash";
+  // 내리막으로 미끄러지는데 오르막으로 걷고 있지 않다 → 허우적
+  if (Math.abs(g.미끄럼) > 0.45 && g.방향 !== -Math.sign(g.미끄럼)) return "p-slip";
+  if (g.방향) {
+    const px = g.x * 반길이;
+    if (걸음.앞 != null) 걸음.누적 += Math.abs(px - 걸음.앞);
+    걸음.앞 = px;
+    return "p-walk" + (Math.floor(걸음.누적 / 20) % 4 + 1);
+  }
+  걸음.앞 = g.x * 반길이;
+  return "p-idle";
+}
+function 공주보는쪽(g, 장) {
+  if (장 === "p-dash") return g.대시쪽;
+  if (장 === "p-slip") return -Math.sign(g.미끄럼) || g.보는쪽;   // 오르막 쪽을 보고 버틴다
+  return g.보는쪽;
+}
+
+function 공주그리기(g, t) {
+  if (!g) {                                    // 시작 전: 왼쪽에 서서 기다림
+    const 각 = R.곰무게 * 0.5 + R.공주무게 * -0.3;
+    const [x, y] = 막대점(-0.3, 각, 10);
+    if (있나("p-idle")) 한장("p-idle", x, y, 공주배, 384, 730, 1, 각 * 0.45);
+    else 상자공주(x, y, 0);
+    return;
+  }
+  // 떨어짐: 끝 밖으로 미끄러져 바다로
+  if (g.끝 === "떨어짐") {
+    const p = Math.max(0, t - 끝시각);
+    const 쪽 = Math.sign(g.x);
+    const [x0, y0] = 막대점(쪽 * 1.02, g.각, 10);
+    const x = x0 + 쪽 * 120 * p, y = y0 + 300 * p * p - 40 * p;
+    if (y < H) 떨어진x = Math.max(24, Math.min(W - 24, x));
+    if (y < H + 80) {
+      if (있나("p-fall")) 한장("p-fall", x, y - 40, 공주배, 384, 400, 쪽, 쪽 * p * 3);
+      else 상자공주(x, y, 쪽 * p * 4);
+    }
+    return;
+  }
+  let 장 = g.끝 === "성공" ? "p-win" : 공주장(g, t);
+  const 보는쪽 = 공주보는쪽(g, 장);
+  const [x, y] = 막대점(g.x, g.각, 10);
+  // 몸은 중력 쪽으로 서지만 시소가 기운 만큼 조금은 따라 기운다. 돌풍이 불면 바람을 거슬러 몸을 숙인다
+  const 돌림 = g.각 * 0.45 + (g.바람.상태 === "붐" ? -g.바람.쪽 * 0.14 : 0);
+  let 뜀 = g.끝 === "성공" ? Math.abs(Math.sin((t - 끝시각) * 7)) * 10 : 0;
+  // 걷기 그림이 아직 없으면 대기 그림을 들썩이며 대신한다
+  if (장.startsWith("p-walk") && !있나(장)) { 장 = "p-idle"; 뜀 = Math.abs(Math.sin(걸음.누적 / 20 * Math.PI / 2)) * 4; }
+  if (있나(장)) 한장(장, x, y - 뜀, 공주배, 384, 730, 보는쪽, 돌림);
+  else 상자공주(x, y - 뜀, 돌림);
+  if (t < g.기절끝 && !g.끝) {                    // 기절 — 머리 위로 별이 빙빙
+    const [hx, hy] = 막대점(g.x, g.각, 128);
+    for (let i = 0; i < 3; i++) {
+      const a = t * 7 + i * Math.PI * 2 / 3, sx = hx + Math.cos(a) * 18, sy = hy + Math.sin(a) * 6;
+      별모양(sx, sy, 5, "#ffd84d");
+    }
+  }
+  if (장 === "p-dash" && Math.random() < 0.6) {
+    먼지.push({ x: x - g.대시쪽 * 14, y: y - 4, vx: -g.대시쪽 * (30 + Math.random() * 40), vy: -20 - Math.random() * 30, 삶: 0.4 });
+  }
+}
+
+function 별모양(x, y, r, 색) {
+  ctx.save(); ctx.translate(x, y); ctx.fillStyle = 색; ctx.strokeStyle = "rgba(150,100,0,.7)"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+  ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+}
+
+/* 막판 별사탕 — 떨어질 자리가 시소 위에서 반짝이고, 하늘에서 빙글 돌며 떨어진다 */
+function 별그리기(g, t, 각) {
+  const b = g && g.별;
+  if (!b || 판상태 !== "play") return;
+  const q = Math.max(0, Math.min(1, (t - b.시작) / (b.끝 - b.시작)));
+  const [tx, ty] = 막대점(b.자리, 각, 12);
+  // 떨어질 자리 표시 — 반짝이 고리가 점점 진해진다
+  ctx.save(); ctx.translate(tx, ty); ctx.rotate(각);
+  ctx.globalAlpha = 0.35 + 0.55 * q;
+  ctx.strokeStyle = "#ffe066"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.ellipse(0, 0, R.별반폭 * 반길이 * (1.3 - 0.3 * q), 4, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  if (Math.floor(t * 12) % 2 === 0) 별모양(tx + Math.sin(t * 9) * 6, ty - 10, 3.5, "#fff6c2");
+  // 별 — 화면 위에서 가속하며 떨어진다
+  const 높이 = (1 - q * q) * (ty + 60);
+  const x = tx, y = ty - 높이 - 6;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(t * 6);
+  if (있나("star")) ctx.drawImage(그림.star, -22, -22, 44, 44);
+  else 별모양(0, 0, 18, "#ffd84d");
+  ctx.restore();
+}
+
+function 상자공주(x, y, 돌림) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(돌림);
+  ctx.fillStyle = "#c4a8ec"; ctx.strokeStyle = "rgba(80,30,55,.55)"; ctx.lineWidth = 3;
+  둥근네모(-18, -80, 36, 80, 12); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, -98, 20, 0, Math.PI * 2); ctx.fillStyle = "#ffe3d3"; ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function 곰장(c) {
+  if (c.상태 === "예고") return "b-grin";
+  if (c.상태 === "던지기") return "b-move1";
+  if (c.상태 === "걷기" || c.상태 === "돌진") {
+    const bx = c.자리 * 반길이;
+    if (곰걸음.앞 != null) 곰걸음.누적 += Math.abs(bx - 곰걸음.앞);
+    곰걸음.앞 = bx;
+    return Math.floor(곰걸음.누적 / 18) % 2 ? "b-move2" : "b-move1";
+  }
+  곰걸음.앞 = c.자리 * 반길이;
+  return "b-hang";
+}
+
+function 곰그리기(g, t) {
+  const c = g ? g.곰 : { 상태: "쉼", 자리: 0.5, 목표: 0.5, 시작: 0 };
+  const 각 = g ? g.각 : R.곰무게 * 0.5 + R.공주무게 * -0.3;
+  // 성공: 지쳐서 손을 놓고 바다로
+  if (g && g.끝 === "성공") {
+    const p = Math.max(0, t - 끝시각);
+    const [x0, y0] = 막대점(c.자리, 각, -6);
+    const y = y0 + 260 * p * p;
+    if (y < H + 80) {
+      if (있나("b-fall")) 한장("b-fall", x0, y + 60, 곰배, 384, 400, 1, p * 2);
+      else 상자곰(x0, y, p * 2);
+    }
+    return;
+  }
+  const [x, y] = 막대점(c.자리, 각, -6);          // 막대 가운데선 조금 아래를 쥔다
+  const 장 = g ? 곰장(c) : "b-hang";
+  const 옮기는중 = c.상태 === "걷기" || c.상태 === "돌진";
+  const 보는쪽 = 옮기는중 ? (Math.sign(c.목표 - c.자리) || 1) : (g ? Math.sign(g.x - c.자리) || 1 : -1);
+  // 매달린 몸은 추처럼 흔들린다 — 옮겨 갈 때 뒤로 끌리고, 흔들기 장난 땐 크게
+  let 목표흔들 = 0;
+  if (c.상태 === "걷기") 목표흔들 = -Math.sign(c.목표 - c.자리) * 0.10;
+  if (c.상태 === "돌진") 목표흔들 = -Math.sign(c.목표 - c.자리) * 0.28;
+  if (c.상태 === "흔들기") 목표흔들 = Math.sin((t - c.시작) * 2 * Math.PI * R.흔들기빠르기) * 0.45;
+  곰걸음.흔들속도 += ((목표흔들 - 곰걸음.흔들) * 60 - 곰걸음.흔들속도 * 9) * 프레임dt;
+  곰걸음.흔들 += 곰걸음.흔들속도 * 프레임dt;
+  const 흔들 = 곰걸음.흔들 + Math.sin(t * 2.1) * 0.04;
+  const 웅크림 = c.상태 === "예고" ? Math.abs(Math.sin((t - c.시작) * 18)) * 3 : 0;
+  if (있나(장)) 한장(장, x, y - 웅크림, 곰배, 384, 70, 보는쪽, 흔들);
+  else 상자곰(x, y, 흔들);
+  if (c.상태 === "예고" && Math.random() < 0.35) 반짝.push({ x: x + (Math.random() - .5) * 60, y: y + 20 + Math.random() * 50, 삶: 0.5 });
+  if (c.상태 === "예고") 말풍선(x + 52 * 보는쪽, y + 30, "흐흐");
+  if (c.상태 === "속임") 말풍선(x + 50 * 보는쪽, y + 46, "메롱~");
+  // 돌진 속도선(흰 줄 셋)은 뺐다 — 그림과 안 어울린다 (2026-10-10 사용자)
+}
+
+function 상자곰(x, y, 흔들) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(흔들);
+  ctx.fillStyle = "rgba(220,60,90,.8)"; ctx.strokeStyle = "rgba(120,20,40,.8)"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.ellipse(0, 70, 30, 40, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function 말풍선(x, y, 글) {
+  ctx.save();
+  ctx.font = "800 15px Pretendard, 'Malgun Gothic', sans-serif";
+  const w = ctx.measureText(글).width + 20;
+  ctx.fillStyle = "rgba(255,255,255,.95)"; ctx.strokeStyle = "rgba(120,50,80,.5)"; ctx.lineWidth = 2;
+  둥근네모(x - w / 2, y - 14, w, 28, 13); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#c2416f"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(글, x, y);
+  ctx.restore();
+}
+
+/* 돌풍 — 예고 땐 바람 줄이 옅게 흐르기 시작하고, 불 땐 세찬 줄과 꽃잎이 날린다 */
+function 바람그리기(g, t, dt) {
+  const w = g ? g.바람 : null;
+  // 몇 개를 만들지는 시간으로 정한다 (화면을 몇 번 그리는지로 정하면 주사율 높은 모니터에서 수천 개가 쌓였다)
+  if (w && 판상태 === "play" && (w.상태 === "예고" || w.상태 === "붐")) {
+    바람쌓임 += (w.상태 === "붐" ? 90 : 18) * dt;          // 1초에 만드는 줄 수
+  } else 바람쌓임 = 0;
+  for (; 바람쌓임 >= 1 && 바람줄.length < 160; 바람쌓임--) {
+    {
+      const 꽃잎 = w.상태 === "붐" && Math.random() < 0.25;
+      바람줄.push({ x: w.쪽 > 0 ? -60 : W + 60, y: 40 + Math.random() * (H - 60), 쪽: w.쪽,
+                  v: (w.상태 === "붐" ? 700 : 420) + Math.random() * 300, 길이: 30 + Math.random() * 60,
+                  꽃잎, 돌: Math.random() * 6, 진하기: w.상태 === "붐" ? 0.75 : 0.35 });
+    }
+  }
+  ctx.save(); ctx.lineCap = "round";
+  바람줄 = 바람줄.filter((d) => d.x > -120 && d.x < W + 120);
+  for (const d of 바람줄) {
+    d.x += d.쪽 * d.v * dt; d.돌 += dt * 8;
+    if (d.꽃잎) {
+      ctx.save(); ctx.translate(d.x, d.y + Math.sin(d.돌) * 6); ctx.rotate(d.돌);
+      ctx.fillStyle = "rgba(246,160,190,.9)"; ctx.beginPath(); ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = "rgba(255,255,255," + d.진하기 + ")"; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.쪽 * d.길이, d.y); ctx.stroke();
+    }
+  }
+  ctx.restore();
+  // 글자로 알리지 않는다 — 바람 줄과 꽃잎만으로 알아채게 (2026-10-10 사용자)
+}
+
+function 알갱이(dt) {
+  ctx.save();
+  먼지 = 먼지.filter((d) => (d.삶 -= dt) > 0);
+  for (const d of 먼지) {
+    d.x += d.vx * dt; d.y += d.vy * dt; ctx.globalAlpha = d.삶 * 2; ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(d.x, d.y, 4 + (0.4 - d.삶) * 10, 0, Math.PI * 2); ctx.fill();
+  }
+  반짝 = 반짝.filter((d) => (d.삶 -= dt) > 0);
+  for (const d of 반짝) {
+    if (d.vx != null) { d.vy += 300 * dt; d.x += d.vx * dt; d.y += d.vy * dt; }   // 별사탕 반짝이는 튀어 흩어진다
+    ctx.globalAlpha = d.삶 * 2; ctx.fillStyle = d.색 || "#ffe066"; const r = 5 * d.삶 * 2;
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, rr = i % 2 ? r * 0.35 : r; ctx.lineTo(d.x + Math.cos(a) * rr, d.y + Math.sin(a) * rr); }
+    ctx.fill();
+  }
+  물보라 = 물보라.filter((d) => (d.삶 -= dt) > 0);
+  for (const d of 물보라) {
+    d.vy += 520 * dt; d.x += d.vx * dt; d.y += d.vy * dt; ctx.globalAlpha = Math.min(1, d.삶 * 2);
+    ctx.fillStyle = d.색; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+// 젤리가 시소에 떨어지는 순간 — 분홍 방울이 튄다
+function 철퍽(u) {
+  const g = 엔진.g, [x, y] = 막대점(u, g.각, 12);
+  for (let i = 0; i < 14; i++) {
+    const a = -Math.PI / 2 + (Math.random() - .5) * 2.2, v = 60 + Math.random() * 120;
+    물보라.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 1.5 + Math.random() * 2.5, 삶: 0.5 + Math.random() * 0.3,
+                색: "rgba(230,50,90,.95)" });
+  }
+  Sound.glide(260, 90, 0.12, "sine", 0.12);
+}
+
+function 첨벙(x) {
+  for (let i = 0; i < 40; i++) {
+    const a = -Math.PI / 2 + (Math.random() - .5) * 1.6, v = 160 + Math.random() * 260;
+    물보라.push({ x, y: H - 4, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 2 + Math.random() * 4, 삶: 0.9 + Math.random() * 0.4,
+                색: Math.random() < 0.5 ? "rgba(255,255,255,.95)" : "rgba(150,240,220,.95)" });
+  }
+  Sound.thud(0.6);
+}
+
+function 표시판(g, t) {
+  // 왼쪽 위: 남은 초와 버틴 시간 막대 — 다 차면 성공 (가운데는 열기구 자리라 비워 둔다)
+  const x = 20, w = 170, y = 44;
+  const 지난 = !g ? 0 : 판상태 === "play" ? t - g.t0 : g.t - g.t0;
+  const 남음 = Math.max(0, R.버틸초 - 지난);
+  ctx.fillStyle = "rgba(90,30,60,.30)"; 둥근네모(x - 3, y - 3, w + 6, 18, 9); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.7)"; 둥근네모(x, y, w, 12, 6); ctx.fill();
+  ctx.fillStyle = "#f2668f"; 둥근네모(x, y, Math.max(12, w * Math.min(1, 지난 / R.버틸초)), 12, 6); ctx.fill();
+  ctx.font = "900 26px Pretendard, 'Malgun Gothic', sans-serif"; ctx.textBaseline = "middle";
+  ctx.lineWidth = 5; ctx.strokeStyle = "rgba(255,255,255,.9)"; ctx.fillStyle = 남음 < 6 ? "#15924f" : "#5b2f42";
+  ctx.textAlign = "left"; ctx.strokeText(Math.ceil(남음) + "초", x, 22); ctx.fillText(Math.ceil(남음) + "초", x, 22);
+  // 대시 준비 표시 — 오른쪽 위 동그라미가 다 차면 다시 쓸 수 있다
+  if (g) {
+    const 남은쿨 = Math.max(0, g.대시가능 - (판상태 === "play" ? t : g.t));
+    const 참 = 1 - 남은쿨 / (g.대시쿨길이 || R.대시쿨[0]);
+    const cx = W - 34, cy = 22;
+    ctx.fillStyle = "rgba(90,30,60,.30)"; ctx.beginPath(); ctx.arc(cx, cy, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 참 >= 1 ? "#f2668f" : "rgba(242,102,143,.5)";
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, 13, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * 참); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.font = "900 11px sans-serif"; ctx.textAlign = "center"; ctx.fillText("대시", cx, cy + 1);
+  }
+}
+
+let 앞시각 = 지금();
+function draw() {
+  const t = 지금();
+  프레임dt = Math.min(0.05, t - 앞시각); 앞시각 = t;
+  if (판상태 === "count" && t >= 카운트끝) {                // 시작! — 여기서부터 시간이 흐른다
+    엔진.시작(카운트끝); 엔진.입력("방향", t, 방향키()); 판상태 = "play";
+  }
+  if (판상태 === "play") { 엔진.진행(t); 소식처리(); if (엔진.g.끝) 끝처리(); }
+  const g = 엔진 ? 엔진.g : null;
+  const 각 = g ? g.각 : R.곰무게 * 0.5 + R.공주무게 * -0.3;
+  ctx.clearRect(0, 0, W, H);
+  열기구(t, 각);
+  곰그리기(g, t);                               // 곰은 시소 아래에 매달린다 (막대가 손을 덮는다)
+  시소(각);
+  웅덩이그리기(g, t, 각);
+  공주그리기(g, t);
+  젤리그리기(g, t, 각);
+  별그리기(g, t, 각);
+  바람그리기(g, t, 프레임dt);
+  알갱이(프레임dt);
+  표시판(g, t);
+  if (판상태 === "count") 카운트(t);
+  if (판상태 === "play") 상태줄();
+  requestAnimationFrame(draw);
+}
+
+// 준비 → 시작! (원작의 시작 신호처럼). 글자가 톡 튀어나왔다 잦아든다.
+function 카운트(t) {
+  const 남 = 카운트끝 - t, 글 = 남 > 0.7 ? "준비" : "시작!";
+  const q = 1 - ((남 > 0.7 ? 남 - 0.7 : 남) / 0.7);
+  const k = 1 + 0.35 * Math.max(0, 1 - q * 4);
+  ctx.save();
+  ctx.translate(W / 2, H / 2 + 20); ctx.scale(k, k);
+  ctx.font = "900 64px Pretendard, 'Malgun Gothic', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.lineWidth = 10; ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.strokeText(글, 0, 0);
+  ctx.fillStyle = 글 === "준비" ? "#7c3aed" : "#f2668f"; ctx.fillText(글, 0, 0);
+  ctx.restore();
+}
+
+/* 대시 — 공기를 가르며 다가왔다 멀어지는 "휘익" (assets/_sounds/seesaw/dash.mp3, 직접 합성한 소리).
+   처음엔 작은 바람 소리, 그다음엔 "툭·뿅·휙" 을 겹친 소리였는데 사용자가 실제 게임 대시처럼 바람 소리로 원했다 (2026-10-10).
+   재생 속도를 조금씩 흩어 같은 소리가 반복돼도 기계처럼 들리지 않게 한다. */
+Sound.use({ dash: "assets/_sounds/seesaw/dash.mp3?v=245" });
+function 대시소리() {
+  // 파일이 아직 안 왔으면 코드로 만든 바람 소리로 대신한다
+  if (!Sound.play("dash", { vol: 0.95, rate: 0.94 + Math.random() * 0.12 })) Sound.swoosh(1.0);
+}
+
+function 소식처리() {
+  const 소식 = 엔진.g.소식;
+  for (; 읽은소식 < 소식.length; 읽은소식++) {
+    const s = 소식[읽은소식];
+    if (s.일 === "곰예고") Sound.tick(0.8, 0.05);
+    if (s.일 === "곰돌진") Sound.swoosh(0.6);
+    if (s.일 === "곰흔들기") Sound.swoosh(0.4);
+    if (s.일 === "대시") 대시소리();
+    if (s.일 === "곰되돌기") Sound.swoosh(0.5);
+    if (s.일 === "곰던지기") Sound.swoosh(0.45);
+    if (s.일 === "젤리철퍽") 철퍽(s.자리);
+    if (s.일 === "별예고") Sound.tick(2.4, 0.04);
+    if (s.일 === "별") {                              // 떨어진 자리에 반짝이 — 맞으면 "콩!"
+      const [x, y] = 막대점(s.자리, 엔진.g.각, 12);
+      for (let i = 0; i < 10; i++) { const a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 90;
+        반짝.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, 삶: 0.5, 색: i % 2 ? "rgba(255,224,102,.95)" : "rgba(255,255,255,.95)" }); }
+      if (s.맞음) Sound.thud(0.6); else Sound.tick(1.7, 0.05);
+    }
+    if (s.일 === "바람예고") Sound.swoosh(0.2);
+    if (s.일 === "바람") { Sound.swoosh(0.9); setTimeout(() => Sound.swoosh(0.6), 500); setTimeout(() => Sound.swoosh(0.4), 1000); }
+  }
+}
+
+function 상태줄() {
+  const g = 엔진.g;
+  status.innerHTML = "버틴 시간 <b>" + Math.min(R.버틸초, g.t - g.t0).toFixed(1) + "</b>초 / " + R.버틸초 + "초";
+}
+
+function reset() {
+  판상태 = "ready";
+  엔진 = null;
+  먼지 = []; 물보라 = []; 반짝 = []; 바람줄 = [];
+  slot.innerHTML = "";
+  status.innerHTML = "<b>" + R.버틸초 + "</b>초 동안 시소에서 떨어지지 않으면 성공";
+  go.textContent = "도 전";
+  go.classList.remove("playing");
+}
+
+function start() {
+  엔진 = 시소판(R);
+  엔진.시작(지금());                    // 자리만 잡아 둔다. 시간은 "시작!" 에서 다시 잰다
+  읽은소식 = 0;
+  걸음.앞 = null; 곰걸음.앞 = null;
+  판상태 = "count";
+  카운트끝 = 지금() + 1.4;
+  Sound.tick(1.0, 0.06);
+  slot.innerHTML = "";
+  go.textContent = "포 기";
+  go.classList.add("playing");
+  상태줄();
+}
+
+// 끝났다. 떨어지는(또는 곰이 떨어지는) 모습을 다 보여 준 뒤 판정을 띄운다.
+function 끝처리() {
+  if (판상태 !== "play") return;
+  끝시각 = 지금();
+  상태줄();
+  go.classList.remove("playing");
+  const g = 엔진.g;
+  판상태 = g.끝 === "포기" ? "done" : "ending";
+  if (g.끝 === "떨어짐") setTimeout(() => 첨벙(떨어진x), 720);   // 바다에 닿는 순간 (떨어지던 그 자리)
+  if (g.끝 === "성공") setTimeout(() => 첨벙(W / 2 + g.곰.자리 * 반길이), 560);
+  setTimeout(판정, 판상태 === "ending" ? 1300 : 0);
+}
+
+function 판정() {
+  판상태 = "done";
+  const g = 엔진.g;
+  const ok = g.끝 === "성공";
+  const 까닭 = ok ? R.버틸초 + "초 버팀!" : g.끝 === "포기" ? "포기" : "풍덩!";
+  status.innerHTML = "버틴 시간 <b>" + Math.min(R.버틸초, g.t - g.t0).toFixed(1) + "</b>초";
+  slot.innerHTML = verdictHtml(ok, 까닭);
+  go.textContent = "다 시";
+  setTimeout(() => { if (ok) Sound.success(); else Sound.fail(); }, 120);
+}
+
+/* 걷기는 키를 쥐고 있는 동안. 대시는 스페이스를 누른 순간. */
+const 쥔키 = new Set();
+const 방향키 = () => ((쥔키.has("KeyD") || 쥔키.has("ArrowRight")) ? 1 : 0)
+                  - ((쥔키.has("KeyA") || 쥔키.has("ArrowLeft"))  ? 1 : 0);
+const 걷는키 = ["KeyA", "KeyD", "ArrowLeft", "ArrowRight"];
+function 키바뀜(ev) {
+  if (판상태 !== "play") return;
+  엔진.입력("방향", 눌린시각(ev), 방향키());
+  소식처리();
+  if (엔진.g.끝) 끝처리();
+}
+addEventListener("keydown", (e) => {
+  if (걷는키.includes(e.code)) {
+    e.preventDefault();
+    if (!쥔키.has(e.code)) { 쥔키.add(e.code); 키바뀜(e); }
+    return;
+  }
+  if (e.code === "Space" && 판상태 === "play") {          // 대시는 스페이스로만 (2026-10-10 사용자)
+    e.preventDefault();
+    if (e.repeat) return;
+    엔진.입력("대시", 눌린시각(e));
+    소식처리();
+  }
+});
+addEventListener("keyup", (e) => { if (쥔키.delete(e.code)) 키바뀜(e); });
+addEventListener("blur", () => { 쥔키.clear(); 키바뀜(); });
+
+// 스페이스·엔터는 시작과 다시하기에도 쓴다. 하는 중의 스페이스는 대시다.
+go.addEventListener("click", () => {
+  if (판상태 === "count") return;
+  if (판상태 === "ready") start();
+  else if (판상태 === "play") { 엔진.g.끝 = "포기"; 끝처리(); }
+  else if (판상태 === "done") reset();
+});
+onPressKey(() => {
+  if (판상태 === "ready") start();
+  else if (판상태 === "done") reset();
+});
+
+reset();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

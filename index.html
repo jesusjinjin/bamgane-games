@@ -9,7 +9,7 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>밤가네 미니게임</title>
-<link rel="stylesheet" href="common.css?v=210">
+<link rel="stylesheet" href="common.css?v=245">
 <style>
   /* 무대는 잘라 내기만 하고 스크롤이 없다. 목록은 게임이 늘수록 길어지므로
      이 칸만 굴러가게 해 둔다. 아래쪽에 여백을 둬야 마지막 줄이 바닥에 붙지 않는다. */
@@ -137,7 +137,7 @@
      사용자 조정 (2026-10-09): 안내 문구는 그대로, 플레이 표시와 카드 테두리는 게임마다 다른 색을 빼고
      **분홍 하나로 통일**. 그래서 카드에 게임별 색(--accent-1/2)을 물들이던 tinted 층을 끈다.
      배경 그림: assets/_hub/hub-bg.webp (왕관 축제 광장). 화면 장식만 바꾼다 — 목록·모드·랜덤 동작은 그대로. */
-  .stage { background: url('assets/_hub/hub-bg.webp?v=210') center / cover no-repeat; }
+  .stage { background: url('assets/_hub/hub-bg.webp?v=245') center / cover no-repeat; }
   .stage::before { content: ""; position: absolute; inset: 0; pointer-events: none;
                    background: linear-gradient(180deg, rgba(255,240,246,.55), rgba(255,240,246,.25) 40%,
                                                        rgba(120,50,80,.25)); }
@@ -209,8 +209,8 @@
   </div>
 </div></div>
 
-<script src="common.js?v=210"></script>
-<script src="sound.js?v=210"></script>
+<script src="common.js?v=245"></script>
+<script src="sound.js?v=245"></script>
 <script>
 "use strict";
 
@@ -220,17 +220,19 @@
 // 2D 로 바꾼 게임부터 하나씩 그림을 붙여 나간다.
 const GAMES = [
   { file: "ricecut.html",   name: "롤케이크 자르기",       c1: "#ec4899", c2: "#e11d48", icon: "knife",
-    img: "assets/_icons/ricecut-sweets.webp?v=210" },
+    img: "assets/_icons/ricecut-sweets.webp?v=245" },
   { file: "curling.html",   name: "마카롱 컬링",     c1: "#f59e0b", c2: "#ea580c", icon: "target",
-    img: "assets/_icons/curling-sweets.webp?v=210" },
+    img: "assets/_icons/curling-sweets.webp?v=245" },
   { file: "stack.html",     name: "케이크 층 쌓기",       c1: "#0ea5e9", c2: "#4f46e5", icon: "stack",
-    img: "assets/_icons/stack-sweets.webp?v=210" },
+    img: "assets/_icons/stack-sweets.webp?v=245" },
   { file: "oddone.html",    name: "젤리빈 고르기",       c1: "#14b8a6", c2: "#0d9488", icon: "odd",
-    img: "assets/_icons/oddone-sweets.webp?v=210" },
+    img: "assets/_icons/oddone-sweets.webp?v=245" },
   { file: "fill.html",      name: "사탕 담기",       c1: "#fb7185", c2: "#e11d48", icon: "basket",
-    img: "assets/_icons/fill-candy.webp?v=210" },
+    img: "assets/_icons/fill-candy.webp?v=245" },
   { file: "tower.html",     name: "마카롱 탑 해체",    c1: "#34d399", c2: "#059669", icon: "tower",
-    img: "assets/_icons/tower-sweets.webp?v=210" },
+    img: "assets/_icons/tower-sweets.webp?v=245" },
+  { file: "seesaw.html",    name: "웨하스 시소타기", c1: "#a78bfa", c2: "#7c3aed", icon: "seesaw",
+    img: "assets/_icons/seesaw-sweets.webp?v=245" },
 ];
 
 // 아이콘은 선으로만 그린다. 배경 타일 색이 게임을 구분해 준다.
@@ -270,6 +272,11 @@ const ICONS = {
        + '<circle cx="11" cy="16" r="2.2"/><circle cx="6" cy="12" r="1.8"/>',
   // 베개 — 솜이 든 둥근 네모와 바느질 선
   pillow:'<rect x="3" y="7" width="18" height="10" rx="4"/><path d="M7 7v10M17 7v10"/>',
+  // 외줄과 양산 — 줄 위에서 균형을 잡는다
+  rope:  '<path d="M2 18h20"/><path d="M12 18V8"/><path d="M7 8a5 3 0 0 1 10 0z"/>',
+  seesaw:'<path d="M3 14l18-4"/><path d="M12 12v-8"/><circle cx="8" cy="9" r="2"/>',
+  // 성문 — 아치 문과 성벽
+  gate:  '<path d="M4 21V11a8 8 0 0 1 16 0v10"/><path d="M9 21v-5a3 3 0 0 1 6 0v5"/><path d="M2 21h20"/>',
   // 장독 항아리 — 두드려 소리를 듣는다
   jar:   '<path d="M8 6h8l1.5 3c1.5 2 1.5 8 0 10H6.5c-1.5-2-1.5-8 0-10z"/>'
        + '<path d="M6 6h12"/>',

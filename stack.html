@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>케이크 층 쌓기</title>
-<link rel="stylesheet" href="common.css?v=210">
-<script src="common.js?v=210"></script>
-<script src="sound.js?v=210"></script>
+<link rel="stylesheet" href="common.css?v=245">
+<script src="common.js?v=245"></script>
+<script src="sound.js?v=245"></script>
 <style>
   :root { --accent-1: #0ea5e9; --accent-2: #4f46e5; }
 
   /* 뒷산 오솔길. 가운데 흙길이 세로로 비어 있어 탑이 올라갈 자리가 된다. */
-  .stage { background: url('assets/stack/sweets-bg.webp?v=210') center / cover no-repeat; }
+  .stage { background: url('assets/stack/sweets-bg.webp?v=245') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -67,7 +67,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/stack-sweets.webp?v=210" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/stack-sweets.webp?v=245" alt=""></div>
     <div class="titles">
       <h1>케이크 층 쌓기</h1>
       <p>Stack</p>
@@ -107,9 +107,9 @@
 const R = RULES.stack;
 
 Sound.use({
-  thud:        "assets/_sounds/stack/place-hard.mp3?v=210", // 돌이 얹히는 소리
-  success:     "assets/_sounds/common/success.mp3?v=210",
-  fail:        "assets/_sounds/common/fail.mp3?v=210",
+  thud:        "assets/_sounds/stack/place-hard.mp3?v=245", // 돌이 얹히는 소리
+  success:     "assets/_sounds/common/success.mp3?v=245",
+  fail:        "assets/_sounds/common/fail.mp3?v=245",
 });
 const cv     = document.getElementById("cv");
 const ctx    = cv.getContext("2d");
@@ -153,7 +153,7 @@ const 맛색 = {                       // 그림이 오기 전 잠깐 보일 실
 for (const [맛, 파일] of [["바닐라", "vanilla"], ["딸기", "strawberry"], ["초코", "chocolate"], ["말차", "matcha"]]) {
   const im = new Image();
   im.onload = () => draw();
-  im.src = "assets/stack/sweets-layer-" + 파일 + ".webp?v=210";
+  im.src = "assets/stack/sweets-layer-" + 파일 + ".webp?v=245";
   맛그림[맛] = im;
 }
 const 맛왔나 = (맛) => 맛그림[맛] && 맛그림[맛].complete && 맛그림[맛].naturalWidth > 0;
