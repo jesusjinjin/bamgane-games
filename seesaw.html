@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>웨하스 시소타기</title>
-<link rel="stylesheet" href="common.css?v=245">
-<script src="common.js?v=245"></script>
-<script src="sound.js?v=245"></script>
+<link rel="stylesheet" href="common.css?v=251">
+<script src="common.js?v=251"></script>
+<script src="sound.js?v=251"></script>
 <style>
   :root { --accent-1: #a78bfa; --accent-2: #7c3aed; }
 
   /* 과자 왕국 하늘 높은 곳 — 저 아래 민트 소다 바다 */
-  .stage { background: #bcd8f6 url('assets/seesaw/bg.webp?v=245') center / cover no-repeat; }
+  .stage { background: #bcd8f6 url('assets/seesaw/bg.webp?v=251') center / cover no-repeat; }
   .body { z-index: 1; }
 
   .board { width: 100%; display: grid; justify-items: center;
@@ -40,7 +40,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/seesaw-sweets.webp?v=245" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/seesaw-sweets.webp?v=251" alt=""></div>
     <div class="titles">
       <h1>웨하스 시소타기</h1>
       <p>Sky Seesaw</p>
@@ -321,7 +321,7 @@ for (const n of ["balloon", "beam", "p-idle", "p-dash", "p-slip", "p-fall", "p-w
                  "p-walk1", "p-walk2", "p-walk3", "p-walk4",
                  "b-hang", "b-move1", "b-move2", "b-grin", "b-fall", "p-dizzy", "star"]) {
   const im = new Image();
-  im.src = "assets/seesaw/" + n + ".webp?v=245";
+  im.src = "assets/seesaw/" + n + ".webp?v=251";
   그림[n] = im;
 }
 const 있나 = (n) => 그림[n] && 그림[n].complete && 그림[n].naturalWidth > 0;
@@ -733,10 +733,15 @@ function 카운트(t) {
 /* 대시 — 공기를 가르며 다가왔다 멀어지는 "휘익" (assets/_sounds/seesaw/dash.mp3, 직접 합성한 소리).
    처음엔 작은 바람 소리, 그다음엔 "툭·뿅·휙" 을 겹친 소리였는데 사용자가 실제 게임 대시처럼 바람 소리로 원했다 (2026-10-10).
    재생 속도를 조금씩 흩어 같은 소리가 반복돼도 기계처럼 들리지 않게 한다. */
-Sound.use({ dash: "assets/_sounds/seesaw/dash.mp3?v=245" });
+Sound.use({ dash: "assets/_sounds/seesaw/dash.mp3?v=251" });
+/* 돌풍 "휘이잉" — Pixabay "Gentle gust"(666HeroHero). 0.6초에 가장 세졌다가 잦아드는 1.65초 (2026-10-11 사용자: 돌풍 소리를 Pixabay 에서).
+   크기 0.24 = 다른 게임 행동 효과음 평균(체감 -25.1 LUFS)보다 2dB 아래 (-27.5). 1.5초 이어지는 소리라 짧은 소리보다 조금 낮춘다.
+   처음엔 옛 합성음 "휙"(평균보다 20dB 작던 소리)에 맞춰 0.04 로 넣었다. 바람 예고의 작은 "휙" 은 그대로 둔다 */
+Sound.use({ gust: "assets/_sounds/seesaw/gust.mp3?v=251" });
 function 대시소리() {
   // 파일이 아직 안 왔으면 코드로 만든 바람 소리로 대신한다
-  if (!Sound.play("dash", { vol: 0.95, rate: 0.94 + Math.random() * 0.12 })) Sound.swoosh(1.0);
+  // 크기 0.28 = 다른 게임 행동 효과음 평균(체감 -25.1 LUFS)에 맞춤. 0.95 일 땐 -15.8 로 성공음(-15)만큼 커서 유난히 컸다 (2026-10-11 사용자)
+  if (!Sound.play("dash", { vol: 0.28, rate: 0.94 + Math.random() * 0.12 })) Sound.swoosh(1.0);
 }
 
 function 소식처리() {
@@ -758,7 +763,9 @@ function 소식처리() {
       if (s.맞음) Sound.thud(0.6); else Sound.tick(1.7, 0.05);
     }
     if (s.일 === "바람예고") Sound.swoosh(0.2);
-    if (s.일 === "바람") { Sound.swoosh(0.9); setTimeout(() => Sound.swoosh(0.6), 500); setTimeout(() => Sound.swoosh(0.4), 1000); }
+    if (s.일 === "바람" && !Sound.play("gust", { vol: 0.24, rate: 0.96 + Math.random() * 0.08 })) {   // 파일이 아직 안 왔으면 예전 합성음
+      Sound.swoosh(0.9); setTimeout(() => Sound.swoosh(0.6), 500); setTimeout(() => Sound.swoosh(0.4), 1000);
+    }
   }
 }
 
