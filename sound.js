@@ -220,17 +220,20 @@ const Sound = (() => {
      아무리 판정음을 화려하게 해도 손맛이 나지 않는다. */
 
   /* 둔탁하게 쿵. 돌이 얹히거나 뭔가 내려앉을 때.
-     power 0~1. 세게 칠수록 낮고 길게 울린다. */
-  function thud(power) {
+     power 0~1. 세게 칠수록 낮고 길게 울린다.
+     크기 — 소리 느낌은 그대로 두고 크기만 곱한다 (안 넘기면 1, 예전 그대로).
+     또렷 — 몸통이 150Hz 아래라 노트북 스피커에선 거의 안 난다. 0 보다 크면 짧은 중간 음 "톡" 을 얹어 작은 스피커에서도 들리게 한다 (2026-10-11) */
+  function thud(power, 크기, 또렷) {
     const c = ctx(); if (!c || muted) return;
     const p = Number.isFinite(power) ? Math.max(0, Math.min(1, power)) : 0.6;
+    const k = Number.isFinite(크기) ? Math.max(0.001, 크기) : 1;   // 0 이면 지수 감쇠가 오류를 낸다
     const t = c.currentTime;
 
     // 때리는 순간 나머지를 잠깐 눌러 이 소리만 튀어나오게 한다
     duck(0.5 - p * 0.15, 0.07 + p * 0.05);
 
     // 녹음 파일이 등록돼 있으면 그걸 쓴다. 세기에 따라 음높이를 살짝 낮춘다.
-    if (play("thud", { vol: 0.5 + p * 0.5, rate: 1.12 - p * 0.22 })) return;
+    if (play("thud", { vol: (0.5 + p * 0.5) * k, rate: 1.12 - p * 0.22 })) return;
 
     // 몸통 — 낮은 음이 급히 떨어지며 "쿵"
     // 음높이를 매번 조금씩 흩어 놓는다. 똑같은 소리가 반복되면 기계처럼 들린다.
@@ -241,17 +244,18 @@ const Sound = (() => {
     o.frequency.setValueAtTime((150 - p * 40) * 흩음, t);
     o.frequency.exponentialRampToValueAtTime(42 * 흩음, t + 0.10 + p * 0.06);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.16 + p * 0.16, t + 0.006);
+    g.gain.exponentialRampToValueAtTime((0.16 + p * 0.16) * k, t + 0.006);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17 + p * 0.12);
     o.connect(g); g.connect(sfx);
     o.start(t); o.stop(t + 0.34);
+    if (또렷 > 0) tone((760 - p * 200) * 흩음, 0.07, "triangle", 0.09 * 또렷 * k, t);   // 600~720Hz — 작은 스피커가 내는 높이
 
     // 표면 — 돌끼리 부딪히는 거친 결
     const n = noise();
     const bp = c.createBiquadFilter();
     bp.type = "bandpass"; bp.frequency.value = 900 + p * 700; bp.Q.value = 1.1;
     const ng = c.createGain();
-    ng.gain.setValueAtTime(0.10 + p * 0.12, t);
+    ng.gain.setValueAtTime((0.10 + p * 0.12) * k, t);
     ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.06 + p * 0.05);
     n.connect(bp); bp.connect(ng); ng.connect(sfx);
     n.start(t); n.stop(t + 0.2);
@@ -259,10 +263,12 @@ const Sound = (() => {
 
   /* 무언가 빠르게 지나가는 바람. power 0~1 로 속도를 넘긴다.
      칼이 왕복하는 동안 속도에 맞춰 울려 주면 움직임이 손에 잡힌다. */
-  function swoosh(power) {
+  // 크기 — 소리 느낌은 그대로 두고 크기만 곱한다 (안 넘기면 1, 예전 그대로)
+  function swoosh(power, 크기) {
     const c = ctx(); if (!c || muted) return;
     const p = Number.isFinite(power) ? Math.max(0, Math.min(1, power)) : 0.5;
-    if (play("swoosh", { vol: 0.35 + p * 0.55, rate: 0.9 + p * 0.35 })) return;
+    const k = Number.isFinite(크기) ? Math.max(0, 크기) : 1;
+    if (play("swoosh", { vol: (0.35 + p * 0.55) * k, rate: 0.9 + p * 0.35 })) return;
     const t = c.currentTime;
     const n = noise();
     const bp = c.createBiquadFilter();
@@ -273,7 +279,7 @@ const Sound = (() => {
     bp.frequency.linearRampToValueAtTime(600 + p * 500, t + 0.15);
     const g = c.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(0.020 + p * 0.055, t + 0.05);
+    g.gain.linearRampToValueAtTime((0.020 + p * 0.055) * k, t + 0.05);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
     n.connect(bp); bp.connect(g); g.connect(sfx);
     n.start(t); n.stop(t + 0.24);

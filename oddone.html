@@ -6,14 +6,14 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>젤리빈 고르기</title>
-<link rel="stylesheet" href="common.css?v=251">
-<script src="common.js?v=251"></script>
-<script src="sound.js?v=251"></script>
+<link rel="stylesheet" href="common.css?v=254">
+<script src="common.js?v=254"></script>
+<script src="sound.js?v=254"></script>
 <style>
   :root { --accent-1: #14b8a6; --accent-2: #0d9488; }
 
   /* 마당 멍석을 위에서 내려다본 배경. 가운데는 결만 있어 콩이 잘 보인다. */
-  .stage { background: url('assets/oddone/sweets-bg.webp?v=251') center / cover no-repeat; }
+  .stage { background: url('assets/oddone/sweets-bg.webp?v=254') center / cover no-repeat; }
   .topbar { background: rgba(22, 22, 40, .42); }
   .stage::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
@@ -64,7 +64,7 @@
   /* 시작 전 덮개. 예전에는 회색 타원이었는데, 젤리빈으로 바꾼 뒤에도 그 타원이 남아 콩처럼 보였다.
      색을 입히지 않은 흰 젤리빈 그림을 덮개로 쓴다 — 모양은 젤리빈이고 색 정보는 하나도 없어서
      미리 훑어볼 수 없게 한다는 원래 목적은 그대로다. !important 로 칸마다 넣은 색칠 그림을 덮는다. */
-  .pad.idle .cell { background-image: url('assets/oddone/sweets-bean.webp?v=251') !important;
+  .pad.idle .cell { background-image: url('assets/oddone/sweets-bean.webp?v=254') !important;
                     cursor: default;
                     filter: grayscale(1) brightness(.88) drop-shadow(0 2px 3px rgba(20,14,6,.35)); }
 
@@ -87,7 +87,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/oddone-sweets.webp?v=251" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/oddone-sweets.webp?v=254" alt=""></div>
     <div class="titles">
       <h1>젤리빈 고르기</h1>
       <p>Odd One Out</p>
@@ -139,7 +139,7 @@ pad.style.gridTemplateColumns = "repeat(" + R.cols + ", 48px)";
 const beanImg = new Image();
 let beanReady = false;
 beanImg.onload = () => { 평균재기(); beanReady = true; reset(); };
-beanImg.src = "assets/oddone/sweets-bean.webp?v=251";
+beanImg.src = "assets/oddone/sweets-bean.webp?v=254";
 
 /* ── 색 차이를 사람 눈 기준으로 재는 자 ──────────────────────────
    회차마다 "이만큼 다르게" 를 ΔE 로 정해 두고, 그 ΔE 가 나오는
@@ -266,7 +266,7 @@ function tintBean(h, s, l) {
 }
 
 // 헛짚었을 때 낼 소리. 이 게임에서 파일로 된 소리는 이것 하나다.
-Sound.use({ oops: "assets/_sounds/oddone/oops.mp3?v=251" });
+Sound.use({ oops: "assets/_sounds/oddone/oops.mp3?v=254" });
 
 const roundsBox = document.createElement("div");
 roundsBox.className = "rounds";

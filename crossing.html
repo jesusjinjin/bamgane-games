@@ -6,9 +6,9 @@
 <meta http-equiv="cache-control" content="no-cache">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1a2e'/%3E%3Ccircle cx='16' cy='16' r='8.5' fill='none' stroke='%23ec4899' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ec4899'/%3E%3C/svg%3E">
 <title>성문까지 콩콩</title>
-<link rel="stylesheet" href="common.css?v=251">
-<script src="common.js?v=251"></script>
-<script src="sound.js?v=251"></script>
+<link rel="stylesheet" href="common.css?v=254">
+<script src="common.js?v=254"></script>
+<script src="sound.js?v=254"></script>
 <style>
   :root { --accent-1: #f9a8d4; --accent-2: #db2777; }
 
@@ -35,7 +35,7 @@
 
   <div class="topbar">
     <a class="back" href="index.html" title="목록으로">←</a>
-    <div class="tile sm pic"><img src="assets/_icons/crossing-sweets.webp?v=251" alt=""></div>
+    <div class="tile sm pic"><img src="assets/_icons/crossing-sweets.webp?v=254" alt=""></div>
     <div class="titles">
       <h1>성문까지 콩콩</h1>
       <p>Hop to the Gate</p>
@@ -662,8 +662,8 @@ const 새그림 = ["bike1", "taxi1", "minicar1", "scooter1", "icecream2", "tanke
                 "cookie-raft", "log-choco", "log-pretzel", "donut-straw", "donut-choco", "donut-matcha", "croc", "croc-open",
                 "marsh-pink", "marsh-blue", "wormb1", "wormb2", "train2-head", "train2-body",
                 "donut2-straw", "donut2-choco", "donut2-matcha", "caramel", "fish", "b-throw", "jelly-ball", "jelly-splat"];      // 도넛 다시 그린 것 — 구멍이 크고 또렷하다 (있으면 이쪽)
-for (const n of 새그림) { const im = new Image(); im.src = "assets/crossing/" + n + ".webp?v=251"; 그림[n] = im; }
-for (const n of 그림목록) { const im = new Image(); im.src = "assets/crossing/" + n + ".webp?v=251"; 그림[n] = im; }
+for (const n of 새그림) { const im = new Image(); im.src = "assets/crossing/" + n + ".webp?v=254"; 그림[n] = im; }
+for (const n of 그림목록) { const im = new Image(); im.src = "assets/crossing/" + n + ".webp?v=254"; 그림[n] = im; }
 const 있나 = (n) => 그림[n] && 그림[n].complete && 그림[n].naturalWidth > 0;
 const 그림다옴 = () => 그림목록.every(있나);
 // 원본(png) 폭 — webp 를 줄여 저장해도 원본 좌표로 계산하려고. 캐릭터는 768
@@ -1264,15 +1264,15 @@ function draw() {
   앞점프 = !!g.공주.점프;
   if (판상태 === "play") {                            // 곰 젤리 — 던질 때 "휙", 떨어질 때 "철퍽"
     const 곰 = 보.곰모습(그릴λ), 키 = 곰.상태 + (곰.c != null ? 곰.c : "");
-    if (곰.상태 === "던짐" && 앞곰.indexOf("던짐") !== 0) Sound.swoosh(0.4);
-    if (곰.상태 === "비킴" && 곰.c != null && 앞곰.indexOf("던짐") === 0) Sound.thud(0.35);
+    if (곰.상태 === "던짐" && 앞곰.indexOf("던짐") !== 0) Sound.swoosh(0.4, 8.8);               // 곰 움직임 -6dB
+    if (곰.상태 === "비킴" && 곰.c != null && 앞곰.indexOf("던짐") === 0) Sound.thud(0.35, 2.6, 2);   // 젤리 철퍽 — 결과 -3dB
     앞곰 = 키;
   }
   const 붙 = !!(g.공주.붙음 && 토끼λ < g.공주.붙음);
-  if (붙 && !앞붙음) Sound.thud(0.3);                  // 캐러멜에 철썩
+  if (붙 && !앞붙음) Sound.thud(0.3, 2.6, 2);          // 캐러멜에 철썩 — 결과 -3dB
   앞붙음 = 붙;
   const 미끄 = !!(g.공주.점프 && g.공주.점프.미끄럼);
-  if (미끄 && !앞미끄럼) Sound.swoosh(0.35);          // 녹은 웅덩이에서 스르륵
+  if (미끄 && !앞미끄럼) Sound.swoosh(0.35, 13.5);    // 녹은 웅덩이에서 스르륵 — 결과 -3dB
   앞미끄럼 = 미끄;
   if (그림다옴()) {
     const 모들 = 그림장면(그릴λ, 토끼λ);
@@ -1310,18 +1310,21 @@ function 카운트(t) {
   ctx.restore();
 }
 
-// 줄의 상태가 바뀌는 순간 소리 — 열차 종, 폭주 덜컹, 물살 바뀜
+// 줄의 상태가 바뀌는 순간 소리 — 열차 종, 폭주 덜컹, 물살 바뀜.
+// 화면에 보이는 줄만 소리를 낸다 (2026-10-11 소리를 키우면서 — 맵 반대편 열차 종·물살 소리가 계속 들리지 않게).
+// 화면은 9줄이라 선로가 위쪽에 보일 때부터 종이 울린다 — 다가가며 미리 듣는 역할은 남는다
 function 줄소리(r, 모) {
   const 앞 = 앞줄상태[r]; 앞줄상태[r] = 모.상태;
+  if (!(줄위(r) < H && 줄위(r) + S > 0)) return;
   if (앞 === undefined || 앞 === 모.상태) {
-    if (모.종류 === "선로" && 모.상태 === "예고" && Math.random() < 0.06) Sound.tick(2.2, 0.05);   // 땡땡땡
+    if (모.종류 === "선로" && 모.상태 === "예고" && Math.random() < 0.06) Sound.tick(2.2, 0.22);   // 땡땡땡
     return;
   }
-  if (모.종류 === "선로" && 모.상태 === "예고") Sound.tick(2.2, 0.07);
-  if (모.종류 === "선로" && 모.상태 === "지나감") Sound.swoosh(1.0);
+  if (모.종류 === "선로" && 모.상태 === "예고") Sound.tick(2.2, 0.31);            // 위험 예고 -2dB
+  if (모.종류 === "선로" && 모.상태 === "지나감") Sound.swoosh(1.0, 3.7);         // 주변 움직임 -6dB
   if (모.종류 === "길" && 모.상태 === "예고") Sound.thud(0.15);
   if (모.종류 === "길" && 모.상태 === "폭주") Sound.swoosh(0.5);
-  if (모.종류 === "강" && 모.상태 === "예고") Sound.swoosh(0.25);
+  if (모.종류 === "강" && 모.상태 === "예고") Sound.swoosh(0.25, 18.3);          // 물살 반전 예고 -2dB
 }
 
 // 서 있는 마시멜로가 흔들리기 시작하면 "뽀글" — 곧 잠긴다는 귀 신호
@@ -1332,19 +1335,19 @@ function 발밑소리(r, 모) {
   // 눅눅 웨하스가 60% 넘게 젖으면 "뽀글"
   if (모.눅눅 && p.탄 && p.탄.줄 === r) {
     const 젖음 = (엔진.g.t - 엔진.g.기준 - p.탄.시작) / 모.눅눅;
-    if (젖음 > 0.6 && 젖음알림 !== p.탄) { 젖음알림 = p.탄; Sound.tick(0.7, 0.07); setTimeout(() => Sound.tick(0.6, 0.06), 160); }
+    if (젖음 > 0.6 && 젖음알림 !== p.탄) { 젖음알림 = p.탄; Sound.tick(0.7, 0.26); setTimeout(() => Sound.tick(0.6, 0.23), 160); }   // 위험 예고 -2dB
   }
   // 토끼가 있는 줄이나 바로 위 줄의 초코바에 금이 가면 "빠직"
   if (모.종류 === "강" && (p.줄 === r || p.줄 === r - 1)) {
     for (const [i, o] of 모.물건.entries()) {
       const 키 = r + ":" + i;
-      if (o.쪼갬 === "금" && 금알림[키] !== "금" && o.x > -1 && o.x < R.칸수 + 1) Sound.tick(1.9, 0.05);
+      if (o.쪼갬 === "금" && 금알림[키] !== "금" && o.x > -1 && o.x < R.칸수 + 1) Sound.tick(1.9, 0.31);   // 위험 예고 -2dB
       금알림[키] = o.쪼갬;
     }
   }
   // 토끼가 있는 강 줄에 물고기 예고가 뜨면 "뽀글"
   if (모.물고기 && 모.물고기.상태 === "예고" && Math.abs(p.줄 - r) <= 1 && 물고기알림 !== 모.물고기.c + "@" + r) {
-    물고기알림 = 모.물고기.c + "@" + r; Sound.tick(0.6, 0.06);
+    물고기알림 = 모.물고기.c + "@" + r; Sound.tick(0.6, 0.37);   // 위험 예고 -2dB
   }
   // 서 있는 악어가 입을 벌리려고 꿈틀하면 "딱딱" — 머리 칸에서 비키라는 귀 신호
   if (모.종류 === "강" && p.줄 === r && !p.점프) {
@@ -1355,24 +1358,29 @@ function 발밑소리(r, 모) {
   if (!모.마시멜로 || p.줄 !== r || p.점프) return;
   const o = 모.물건.find((o) => p.x >= o.x - 0.2 && p.x <= o.x + o.길이 + 0.2);
   const 지금상태 = o ? o.상태 : "";
-  if (지금상태 === "흔들" && 발밑앞 !== "흔들") { Sound.tick(0.7, 0.07); setTimeout(() => Sound.tick(0.6, 0.06), 160); }
+  if (지금상태 === "흔들" && 발밑앞 !== "흔들") { Sound.tick(0.7, 0.26); setTimeout(() => Sound.tick(0.6, 0.23), 160); }   // 위험 예고 -2dB
   발밑앞 = 지금상태;
 }
 
+/* 효과음 크기 — 역할별 목표 (2026-10-11 사용자 A안: "용도별로 다르게").
+   기준 = 배포 6종의 행동 효과음 10개를 sound.js 그대로(전체 크기 0.55 · 쿵의 눌림 포함) 잰 체감 크기 평균, 헤드폰 -32.6 · 노트북 -33.9 LUFS.
+   목표는 헤드폰과 노트북의 가운데 값으로 맞춘다:  실패 순간 0dB · 위험 예고 -2 · 내 행동의 결과 -3 · 주변 움직임·자주 나는 소리 -6.
+   "휙"·"쿵" 의 두 번째 값은 크기 배수(느낌은 그대로), "쿵" 의 세 번째 값 2 는 노트북에서도 들리게 얹는 중간 음 "톡".
+   측정표는 assets/_sounds/_출처.md */
 /* 토끼 점프 "뽀용" — Pixabay "Bloop 4"(floraphonic). 말랑하게 올라가는 0.26초 (2026-10-11 사용자 B안, 합성음 "콩" 을 바꿈).
    크기는 다른 게임들의 행동 효과음 평균(체감 -25.1 LUFS 헤드폰 · -26.5 노트북)에 맞춘다 (2026-10-11 사용자: 너무 작다).
    처음엔 옛 "콩"(-47.7, 성공음보다 30dB 작던 소리)에 맞춰 0.032 로 넣어서 거의 안 들렸다.
    원음은 200→420Hz 로 낮아 노트북 스피커에서 16dB 더 깎인다 → 1.4배속(약 6반음 위, 280→590Hz)으로 틀어 그 차이를 8dB 로 줄였다.
    점프는 한 판에 수십 번 울리는 가장 잦은 소리라 발소리처럼 평균보다 6dB 아래에 둔다 (2026-10-11 사용자: 0.75 로 넣었더니 "유독 크다").
    vol 0.26 · 1.4배속 = 헤드폰 -31.0 · 노트북 -39.0 (0.75 일 땐 -21.8 · -29.8). 재생 속도 ±5% 흩음. 파일이 아직 안 왔으면 예전 "콩" 으로 */
-Sound.use({ hop: "assets/_sounds/crossing/hop.mp3?v=251" });
+Sound.use({ hop: "assets/_sounds/crossing/hop.mp3?v=254" });
 
 function 소식처리() {
   const 소식 = 엔진.g.소식;
   for (; 읽은소식 < 소식.length; 읽은소식++) {
     const s = 소식[읽은소식];
     if (s.일 === "뜀") { if (!Sound.play("hop", { vol: 0.26, rate: 1.33 + Math.random() * 0.14 })) Sound.tick(1.5, 0.045); 토끼쪽 = s.방향; }
-    if (s.일 === "벽") Sound.thud(0.2);
+    if (s.일 === "벽") Sound.thud(0.2, 2.6, 2);       // 결과 -3dB
   }
 }
 
@@ -1403,7 +1411,7 @@ function start() {
   판상태 = "count";
   카운트시작 = 지금();
   카운트끝 = 카운트시작 + 훑기.머묾 + 훑기.내려옴 + 0.9;   // 훑기 1.3초 → "준비" → "시작!"
-  Sound.tick(1.0, 0.06);
+  Sound.tick(1.0, 0.2);                              // 준비 — 자주 나는 소리 -6dB
   slot.innerHTML = "";
   go.textContent = "포 기";
   go.classList.add("playing");
@@ -1423,10 +1431,11 @@ function 끝처리() {
                   색: ["#ffd36e", "#f9a8d4", "#fff"][i % 3] });
     }
   }
-  if (g.끝 === "치임" || g.끝 === "열차") Sound.thud(0.8);
-  if (g.끝 === "빠짐" || g.끝 === "떠내려감" || g.끝 === "가라앉음" || g.끝 === "눅눅" || g.끝 === "물고기" || g.끝 === "쪼개짐" || g.끝 === "젤리") Sound.swoosh(0.6);
-  if (g.끝 === "지렁이") Sound.thud(0.5);
-  if (g.끝 === "잡힘") Sound.thud(0.5);
+  // 실패 순간 — 평균(0dB)
+  if (g.끝 === "치임" || g.끝 === "열차") Sound.thud(0.8, 3.2, 2);
+  if (g.끝 === "빠짐" || g.끝 === "떠내려감" || g.끝 === "가라앉음" || g.끝 === "눅눅" || g.끝 === "물고기" || g.끝 === "쪼개짐" || g.끝 === "젤리") Sound.swoosh(0.6, 12.3);
+  if (g.끝 === "지렁이") Sound.thud(0.5, 3.5, 2);
+  if (g.끝 === "잡힘") Sound.thud(0.5, 3.5, 2);
   setTimeout(판정, 판상태 === "ending" ? 900 : 0);
 }
 
